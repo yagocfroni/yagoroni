@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Finanças</title>
+<title>Finanças da Casa</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#2f6b4f">
 <meta name="mobile-web-app-capable" content="yes">
@@ -39,9 +39,10 @@
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
 .wrap{max-width:980px;margin:0 auto;padding:0 16px 80px}
 header .wrap{padding-bottom:0}
-header{padding-top:env(safe-area-inset-top);position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0 8px}
 .brand{font-weight:700;font-size:17px;letter-spacing:-.01em}
 #arqStatus{font-size:12.5px;padding:6px 10px;white-space:nowrap}
@@ -133,6 +134,8 @@ dialog h3{margin:0 0 14px;font-size:18px}
 .fields{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
 .fields .full{grid-column:1/-1}
 .dlg-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+.dlg2-texto{white-space:pre-line;font-size:15px;margin:0 0 12px}
+#dlg2 textarea{width:100%;min-height:140px;font:13px/1.4 ui-monospace,monospace;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text)}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s}
 #toast.on{opacity:1}
 .cfg p{margin:0 0 10px;font-size:14px;color:var(--muted)}
@@ -187,6 +190,12 @@ dialog h3{margin:0 0 14px;font-size:18px}
     </div>
   </form>
 </dialog>
+<dialog id="dlg2"><form method="dialog" id="dlg2Form">
+  <h3 id="dlg2Titulo"></h3>
+  <div id="dlg2Texto" class="dlg2-texto"></div>
+  <div id="dlg2Extra"></div>
+  <div class="dlg-acts"><button type="button" class="btn" id="dlg2Nao">Cancelar</button><button type="submit" class="btn primary" id="dlg2Sim">Confirmar</button></div>
+</form></dialog>
 <div id="toast"></div>
 <input type="file" id="importFile" hidden>
 <input type="file" id="importCompras" hidden>
@@ -226,9 +235,10 @@ function prepararPessoas() {
     const ver = n => { if (n && n !== 'Casal' && !vistos.includes(n)) vistos.push(n); };
     db.receitas.forEach(r => ver(r.pessoa)); db.cartoes.forEach(c => ver(c.titular));
     [...db.fixos, ...db.compras, ...db.gastos].forEach(x => ver(x.pessoa));
-    db.pessoas = [vistos[0] || 'Pessoa 1', vistos[1] || 'Pessoa 2'];
+    // só guarda quando achou nomes de verdade nos lançamentos; senão usa "Pessoa 1/2" provisoriamente
+    if (vistos.length) db.pessoas = [vistos[0], vistos[1] || 'Pessoa 2'];
   }
-  PESSOAS = [...db.pessoas]; RESP = [...PESSOAS, 'Casal'];
+  PESSOAS = db.pessoas ? [...db.pessoas] : ['Pessoa 1', 'Pessoa 2']; RESP = [...PESSOAS, 'Casal'];
   const sub = document.getElementById('brandSub'); if (sub) sub.textContent = `${PESSOAS[0]} & ${PESSOAS[1]}`;
 }
 function renomearPessoa(i, novo) {
@@ -236,7 +246,7 @@ function renomearPessoa(i, novo) {
   if (!novo || novo === velho || novo === 'Casal' || PESSOAS.includes(novo)) return false;
   const troca = o => { if (o.pessoa === velho) o.pessoa = novo; if (o.titular === velho) o.titular = novo; };
   [...db.receitas, ...db.fixos, ...db.cartoes, ...db.compras, ...db.gastos].forEach(troca);
-  db.pessoas[i] = novo; prepararPessoas(); return true;
+  db.pessoas = [...PESSOAS]; db.pessoas[i] = novo; prepararPessoas(); return true;
 }
 function salvar() {
   prepararPessoas();
@@ -249,7 +259,8 @@ function salvar() {
 /* ============ Arquivo no PC ============ */
 // Grava os dados num arquivo .json escolhido no computador (Chrome/Edge).
 const celular = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
-const temFS = 'showSaveFilePicker' in window && !celular;
+const emMoldura = (() => { try { return window.self !== window.top; } catch (e) { return true; } })(); // aberto dentro do claude.ai
+const temFS = 'showSaveFilePicker' in window && !celular && !emMoldura;
 let arq = null;          // FileSystemFileHandle
 let arqPronto = false;   // permissão concedida nesta sessão
 const TIPO_JSON = [{ description: 'Dados das finanças', accept: { 'application/json': ['.json'] } }];
@@ -277,7 +288,7 @@ async function lerArquivo(h) {
 }
 function statusArquivo() {
   const b = $('#arqStatus');
-  if (!temFS) { b.className = 'btn small ok'; b.textContent = celular ? '📱 Salvo neste celular' : '✓ Salvo neste navegador'; return; }
+  if (!temFS) { b.className = 'btn small ok'; b.textContent = celular ? '📱 Salvo neste celular' : '✓ Salvo neste aparelho'; return; }
   if (arq && arqPronto) { b.className = 'btn small ok'; b.textContent = '✓ Salvo em ' + arq.name; }
   else if (arq) { b.className = 'btn small warn'; b.textContent = '↻ Reconectar ' + arq.name; }
   else { b.className = 'btn small warn'; b.textContent = '💾 Salvar num arquivo do PC'; }
@@ -965,6 +976,29 @@ $('#dlgForm').addEventListener('submit', e => {
   toast('Salvo');
 });
 
+/* ============ Janelas do próprio app (o navegador às vezes bloqueia alert/confirm) ============ */
+let janelaVez = 0;
+function janela({ titulo, texto, sim = 'Confirmar', nao = 'Cancelar', extra = '' }) {
+  return new Promise(res => {
+    const d = $('#dlg2');
+    $('#dlg2Titulo').textContent = titulo || ''; $('#dlg2Texto').textContent = texto || '';
+    $('#dlg2Extra').innerHTML = extra; $('#dlg2Sim').textContent = sim;
+    $('#dlg2Nao').textContent = nao || ''; $('#dlg2Nao').hidden = !nao;
+    const vez = ++janelaVez; // ignora o "fechou" atrasado de uma janela anterior
+    let feito = false; const fim = v => { if (feito) return; feito = true; if (d.open) d.close(); res(v); };
+    $('#dlg2Form').onsubmit = e => { e.preventDefault(); fim(true); };
+    $('#dlg2Nao').onclick = () => fim(false);
+    d.oncancel = e => { e.preventDefault(); if (vez === janelaVez) fim(false); }; // tecla Esc / voltar
+    d.showModal(); setTimeout(() => ($('#dlg2Extra input, #dlg2Extra textarea') || $('#dlg2Sim')).focus(), 30);
+  });
+}
+const confirmar = (texto, sim = 'Confirmar', titulo = 'Confirmar') => janela({ titulo, texto, sim });
+const avisar = (texto, titulo = 'Aviso') => janela({ titulo, texto, sim: 'OK', nao: '' });
+async function perguntar(texto, valor = '', titulo = '') {
+  const ok = await janela({ titulo, texto, sim: 'Salvar', extra: `<div class="field"><input id="dlg2Input" inputmode="decimal" value="${esc(valor)}"></div>` });
+  return ok ? $('#dlg2Input').value : null;
+}
+
 /* ============ Ações ============ */
 const ACOES = {
   novaEntrada: () => abrirForm('receitas'),
@@ -976,6 +1010,14 @@ const ACOES = {
   salvarReserva: () => { const v = lerValor($('#cfgReserva').value); if (isNaN(v)) return toast('Valor inválido'); db.reserva = v; salvar(); toast('Reserva atualizada'); },
   exportar: async () => {
     const nome = `financas-backup-${hojeISO()}.json`;
+    if (emMoldura) { // aqui não dá para baixar arquivo: mostra o backup como texto para copiar
+      const texto = JSON.stringify(db);
+      const pr = janela({ titulo: 'Backup', texto: 'Copie o texto abaixo e guarde (ex.: mande no WhatsApp para você mesmo). No outro aparelho, use "Juntar com outro aparelho" e cole.', sim: 'Fechar', nao: '', extra: `<button type="button" class="btn primary" id="backupCopiar" style="margin-bottom:10px">Copiar backup</button><textarea id="backupTxt" readonly>${esc(texto)}</textarea>` });
+      $('#backupCopiar').onclick = () => {
+        navigator.clipboard.writeText(texto).then(() => toast('Backup copiado'), () => { const t = $('#backupTxt'); t.focus(); t.select(); toast('Texto selecionado: copie com Ctrl+C ou segurando o dedo'); });
+      };
+      await pr; return;
+    }
     const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
     try {
       const f = new File([blob], nome, { type: 'application/json' });
@@ -986,11 +1028,15 @@ const ACOES = {
   },
   importar: () => $('#importFile').click(),
   importarCompras: () => $('#importCompras').click(),
-  juntar: () => $('#juntarFile').click(),
+  juntar: async () => {
+    const pr = janela({ titulo: 'Juntar com outro aparelho', texto: 'Escolha o arquivo de backup ou cole o texto do backup. Só o que falta é somado; nada é apagado.', sim: 'Juntar', extra: `<button type="button" class="btn" id="juntarArq" style="margin-bottom:10px">Escolher arquivo…</button><textarea id="juntarTxt" placeholder="…ou cole aqui o texto do backup"></textarea>` });
+    $('#juntarArq').onclick = () => { $('#dlg2').close(); $('#juntarFile').click(); };
+    if (await pr) { const t = $('#juntarTxt').value.trim(); if (t) processarJuntar(t); else toast('Cole o texto do backup ou escolha o arquivo'); }
+  },
   arquivo: () => acaoArquivo(),
   novoArquivo: () => escolherArquivo(false),
   abrirArquivo: () => escolherArquivo(true),
-  apagarTudo: () => { if (confirm('Apagar TODOS os dados deste navegador? Isso não pode ser desfeito.')) { db = VAZIO(); salvar(); toast('Tudo apagado'); } },
+  apagarTudo: async () => { if (await confirmar('Apagar TODOS os dados deste aparelho? Isso não pode ser desfeito.', 'Apagar tudo', 'Começar do zero')) { db = VAZIO(); salvar(); toast('Tudo apagado'); } },
 };
 // Soma compras de um arquivo { cartoes:[{nome,fechamento,vencimento}], compras:[{cartao,data,descricao,valor|valorParcela,parcelas,parcelaNaFatura,fatura,categoria,pessoa}] }
 const lerJSON = t => JSON.parse(String(t).replace(/^\uFEFF/, ''));
@@ -998,13 +1044,13 @@ const ehArquivoDeFaturas = d => d && Array.isArray(d.compras) && !Array.isArray(
 $('#importCompras').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   let d; try { d = lerJSON(await f.text()); if (!Array.isArray(d.compras)) throw 0; } catch { return toast('Arquivo inválido'); }
-  if (Array.isArray(d.receitas)) return alert('Esse é um arquivo completo de dados (backup), não um arquivo de faturas. Para abrir ele, use "Abrir arquivo existente" ou "Importar backup".');
+  if (Array.isArray(d.receitas)) return avisar('Esse é um arquivo completo de dados (backup), não um arquivo de faturas. Para ele, use "Juntar com outro aparelho" ou "Substituir por um backup".');
   importarFaturas(d);
 };
-function importarFaturas(d) {
+async function importarFaturas(d) {
   const acharCartao = nome => db.cartoes.find(c => semAcento(c.nome).trim() === semAcento(nome).trim());
   const faltando = [...new Set(d.compras.map(c => c.cartao).filter(n => !acharCartao(n)))];
-  if (faltando.length) return alert(`Cadastre primeiro o cartão: ${faltando.join(', ')} (aba Cartões) e tente de novo.`);
+  if (faltando.length) return avisar(`Cadastre primeiro o cartão: ${faltando.join(', ')} (aba Cartões) e tente de novo.`);
   const ajustes = (d.cartoes || []).map(c => { const a = acharCartao(c.nome); return { c: a, n: a && { fechamento: c.fechamento ?? a.fechamento, vencimento: c.vencimento ?? a.vencimento } }; })
     .filter(x => x.c && (Number(x.c.fechamento) !== Number(x.n.fechamento) || Number(x.c.vencimento) !== Number(x.n.vencimento)));
   const novas = [], repetidas = [];
@@ -1018,7 +1064,7 @@ function importarFaturas(d) {
   }
   const msg = `${novas.length} compra(s) nova(s) para adicionar.` + (repetidas.length ? `\n${repetidas.length} já estavam lançadas e serão puladas.` : '') +
     (ajustes.length ? `\n\nTambém vou corrigir: ${ajustes.map(a => `${a.c.nome} → fecha dia ${a.n.fechamento}, vence dia ${a.n.vencimento}`).join('; ')}.` : '') + '\n\nAdicionar?';
-  if (!confirm(msg)) return;
+  if (!await confirmar(msg.replace(/\n*Adicionar\?$/, ''), 'Adicionar', 'Adicionar faturas')) return;
   for (const a of ajustes) { a.c.fechamento = Number(a.n.fechamento); a.c.vencimento = Number(a.n.vencimento); }
   db.compras.push(...novas);
   salvar(); aba = 'cartoes'; render(); toast(`${novas.length} compra(s) adicionada(s)`);
@@ -1029,7 +1075,7 @@ $('#importFile').onchange = async e => {
     const d = lerJSON(await f.text());
     if (ehArquivoDeFaturas(d)) { e.target.value = ''; return importarFaturas(d); }
     if (!d || !Array.isArray(d.receitas)) throw 0;
-    if (!confirm('Substituir os dados atuais pelos do backup?')) return;
+    if (!await confirmar('Trocar TODOS os dados deste aparelho pelos do backup?', 'Substituir', 'Substituir dados')) return;
     db = Object.assign(VAZIO(), d); salvar(); toast('Backup importado');
   } catch { toast('Arquivo de backup inválido'); }
   e.target.value = '';
@@ -1038,6 +1084,7 @@ $('#importFile').onchange = async e => {
 /* ---------- Juntar dados de outro aparelho (soma, não apaga) ---------- */
 function juntarDados(outro) {
   const novos = {};
+  if (!db.pessoas && Array.isArray(outro.pessoas) && outro.pessoas.length === 2) db.pessoas = [...outro.pessoas];
   for (const col of ['receitas', 'fixos', 'cartoes', 'compras', 'gastos']) {
     const ids = new Set(db[col].map(x => x.id));
     const chaves = col === 'compras' ? new Set(db.compras.map(chaveCompra)) : null;
@@ -1050,13 +1097,16 @@ function juntarDados(outro) {
 }
 $('#juntarFile').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  let d; try { d = lerJSON(await f.text()); } catch { return toast('Arquivo inválido'); }
+  processarJuntar(await f.text());
+};
+function processarJuntar(texto) {
+  let d; try { d = lerJSON(texto); } catch { return toast('Esse texto não é um backup válido'); }
   if (ehArquivoDeFaturas(d)) return importarFaturas(d);
   if (!Array.isArray(d.receitas)) return toast('Esse arquivo não é um backup das finanças');
   const n = juntarDados(d);
   const total = Object.values(n).reduce((a, b) => a + b, 0);
   salvar();
-  alert(total ? `Juntei ${total} lançamento(s) novo(s):\n• ${n.compras} compras no cartão\n• ${n.gastos} gastos\n• ${n.receitas} entradas\n• ${n.fixos} gastos fixos\n• ${n.cartoes} cartões` : 'Nada novo: este aparelho já tinha tudo desse arquivo.');
+  return avisar(total ? `Juntei ${total} lançamento(s) novo(s):\n• ${n.compras} compras no cartão\n• ${n.gastos} gastos\n• ${n.receitas} entradas\n• ${n.fixos} gastos fixos\n• ${n.cartoes} cartões` : 'Nada novo: este aparelho já tinha tudo desse arquivo.');
 };
 
 // Arrastar um arquivo .json para a página
@@ -1066,11 +1116,11 @@ document.addEventListener('drop', async e => {
   const f = e.dataTransfer?.files?.[0]; if (!f) return;
   let d; try { d = lerJSON(await f.text()); } catch { return toast('Esse arquivo não é um .json válido'); }
   if (ehArquivoDeFaturas(d)) return importarFaturas(d);
-  if (Array.isArray(d.receitas)) { if (confirm('Esse é um backup completo. Juntar os lançamentos dele com os deste aparelho (sem apagar nada)?')) { const n = juntarDados(d); salvar(); toast(`${Object.values(n).reduce((a, b) => a + b, 0)} lançamento(s) novo(s)`); } return; }
+  if (Array.isArray(d.receitas)) { if (await confirmar('Esse é um backup completo. Juntar os lançamentos dele com os deste aparelho (sem apagar nada)?', 'Juntar')) { const n = juntarDados(d); salvar(); toast(`${Object.values(n).reduce((a, b) => a + b, 0)} lançamento(s) novo(s)`); } return; }
   toast('Não reconheci esse arquivo');
 });
 
-document.addEventListener('click', e => {
+document.addEventListener('click', async e => {
   const t = e.target.closest('[data-tab],[data-acao],[data-editar],[data-excluir],[data-encerrar],[data-ajustar]');
   if (!t) return;
   if (t.dataset.tab) { aba = t.dataset.tab; render(); window.scrollTo({ top: 0 }); return; }
@@ -1078,7 +1128,7 @@ document.addEventListener('click', e => {
   if (t.dataset.editar) { const [col, id] = t.dataset.editar.split(':'); return abrirForm(col, db[col].find(x => x.id === id)); }
   if (t.dataset.ajustar) {
     const f = db.fixos.find(x => x.id === t.dataset.ajustar), atual = db.ajustes?.[mes]?.[f.id];
-    const r = prompt(`Valor de "${f.nome}" só em ${nomeMes(mes)} (padrão ${brl(f.valor)}).\nDeixe vazio para voltar ao padrão.`, atual != null ? valorTxt(atual) : '');
+    const r = await perguntar(`Valor de "${f.nome}" só em ${nomeMes(mes)} (padrão ${brl(f.valor)}).\nDeixe vazio para voltar ao padrão.`, atual != null ? valorTxt(atual) : '', 'Valor deste mês');
     if (r === null) return;
     db.ajustes ||= {};
     if (r.trim() === '') { if (db.ajustes[mes]) delete db.ajustes[mes][f.id]; }
@@ -1087,19 +1137,19 @@ document.addEventListener('click', e => {
   }
   if (t.dataset.encerrar) {
     const f = db.fixos.find(x => x.id === t.dataset.encerrar);
-    if (confirm(`Encerrar "${f.nome}"? Ele deixa de aparecer a partir de ${nomeMes(mes)}, mas continua no histórico dos meses anteriores.`)) { f.fim = addM(mes, -1); salvar(); }
+    if (await confirmar(`Encerrar "${f.nome}"? Ele deixa de aparecer a partir de ${nomeMes(mes)}, mas continua no histórico dos meses anteriores.`)) { f.fim = addM(mes, -1); salvar(); }
     return;
   }
   if (t.dataset.excluir) {
     const [col, id] = t.dataset.excluir.split(':');
     if (col === 'cartoes') {
       const n = db.compras.filter(c => c.cartaoId === id).length;
-      if (!confirm(`Excluir este cartão${n ? ` e as ${n} compras lançadas nele` : ''}?`)) return;
+      if (!await confirmar(`Excluir este cartão${n ? ` e as ${n} compras lançadas nele` : ''}?`)) return;
       db.compras = db.compras.filter(c => c.cartaoId !== id);
       db.fixos.forEach(f => { if (f.forma === id) f.forma = 'boleto'; });
     } else if (col === 'fixos') {
-      if (!confirm('Excluir este gasto fixo de TODOS os meses? (Para só parar daqui pra frente, use ⏹ Encerrar.)')) return;
-    } else if (!confirm('Excluir este lançamento?')) return;
+      if (!await confirmar('Excluir este gasto fixo de TODOS os meses? (Para só parar daqui pra frente, use ⏹ Encerrar.)', 'Excluir')) return;
+    } else if (!await confirmar('Excluir este lançamento?', 'Excluir')) return;
     db[col] = db[col].filter(x => x.id !== id);
     salvar();
   }
