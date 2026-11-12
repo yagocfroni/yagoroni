@@ -1,0 +1,1123 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Finanças</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2f6b4f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Finanças">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+:root{
+  --bg:#f5f4f0; --surface:#ffffff; --surface-2:#f0eee8; --line:#e2dfd6;
+  --text:#1f1d1a; --muted:#6b675e; --accent:#2f6b4f; --accent-soft:#e3efe8;
+  --danger:#b3412e; --danger-soft:#f7e4df; --warn:#9a6a12; --warn-soft:#f6ecd6;
+  --p0:#2f5d8a; --p0-soft:#e2ebf4; --p1:#a23d6a; --p1-soft:#f5e3eb;
+  --casal:#6a4f9a; --casal-soft:#ece6f5;
+  --radius:14px; --shadow:0 1px 2px rgba(0,0,0,.05),0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151513; --surface:#1e1e1b; --surface-2:#262622; --line:#33322d;
+    --text:#ecebe6; --muted:#a29f95; --accent:#6fbf94; --accent-soft:#1f3a2c;
+    --danger:#e8806c; --danger-soft:#3d221c; --warn:#e2b25a; --warn-soft:#3a2f17;
+    --p0:#7fb0e0; --p0-soft:#1d2b3a; --p1:#e98bb5; --p1-soft:#3a1f2c;
+    --casal:#b39ae6; --casal-soft:#2b2340; --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151513; --surface:#1e1e1b; --surface-2:#262622; --line:#33322d;
+  --text:#ecebe6; --muted:#a29f95; --accent:#6fbf94; --accent-soft:#1f3a2c;
+  --danger:#e8806c; --danger-soft:#3d221c; --warn:#e2b25a; --warn-soft:#3a2f17;
+  --p0:#7fb0e0; --p0-soft:#1d2b3a; --p1:#e98bb5; --p1-soft:#3a1f2c;
+  --casal:#b39ae6; --casal-soft:#2b2340; --shadow:none;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:980px;margin:0 auto;padding:0 16px 80px}
+header .wrap{padding-bottom:0}
+header{padding-top:env(safe-area-inset-top);position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0 8px}
+.brand{font-weight:700;font-size:17px;letter-spacing:-.01em}
+#arqStatus{font-size:12.5px;padding:6px 10px;white-space:nowrap}
+#arqStatus.ok{color:var(--accent);border-color:var(--accent)}
+#arqStatus.warn{color:var(--warn);border-color:var(--warn)}
+@media (max-width:640px){.top{flex-wrap:wrap}.top>div:nth-child(2){order:3;width:100%}#arqStatus{flex:1}}
+.brand small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.mes{display:flex;align-items:center;gap:4px}
+.mes b{min-width:132px;text-align:center;font-size:15px}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;border:1px solid var(--line);background:var(--surface);color:var(--text);padding:7px 13px;border-radius:999px;font:inherit;font-size:14px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
+button{font:inherit;cursor:pointer}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--text);padding:8px 14px;border-radius:10px;font-size:14px}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+:root[data-theme="dark"] .btn.primary{color:#0f1a14}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.primary{color:#0f1a14}}
+.btn.danger{color:var(--danger)}
+.icon{border:0;background:transparent;color:var(--muted);width:34px;height:34px;border-radius:9px;font-size:17px;display:inline-grid;place-items:center}
+.icon:hover{background:var(--surface-2);color:var(--text)}
+section{display:none;padding-top:16px}
+section.on{display:block}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin:22px 0 10px}
+h2:first-child{margin-top:4px}
+.row-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:22px 0 10px}
+.row-head h2{margin:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
+.grid{display:grid;gap:12px}
+.kpis{grid-template-columns:repeat(4,1fr)}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi .lbl{font-size:12.5px;color:var(--muted)}
+.kpi .val{white-space:nowrap;font-size:clamp(17px,4.6vw,22px);font-weight:700;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .sub{font-size:12px;color:var(--muted);margin-top:2px}
+.pos{color:var(--accent)} .neg{color:var(--danger)}
+.two{grid-template-columns:1fr 1fr}
+@media (max-width:760px){.two{grid-template-columns:1fr}}
+.meta{margin-top:12px}
+.bar{height:10px;background:var(--surface-2);border-radius:99px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.bar.warn>i{background:var(--warn)} .bar.bad>i{background:var(--danger)}
+.alert{padding:12px 14px;border-radius:12px;font-size:14px;margin-top:12px}
+.alert.bad{background:var(--danger-soft);color:var(--danger)}
+.alert.ok{background:var(--accent-soft);color:var(--accent)}
+.alert.warn{background:var(--warn-soft);color:var(--warn)}
+.list{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+.item{display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.item .main{flex:1;min-width:0}
+.item .t{font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .s{font-size:12.5px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.item .v{font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+.item .acts{display:flex;gap:0}
+.item.done .t,.item.done .v{color:var(--muted);text-decoration:line-through}
+.item.late .s .due{color:var(--danger);font-weight:600}
+.empty{padding:22px 16px;text-align:center;color:var(--muted);font-size:14px}
+.tag{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:99px;background:var(--surface-2);color:var(--muted)}
+.tag.p0{background:var(--p0-soft);color:var(--p0)}
+.tag.p1{background:var(--p1-soft);color:var(--p1)}
+.tag.Casal{background:var(--casal-soft);color:var(--casal)}
+.tag.prev{background:var(--warn-soft);color:var(--warn)}
+input[type=checkbox].chk{width:22px;height:22px;accent-color:var(--accent);flex:none;cursor:pointer}
+.pessoa{border-left:4px solid var(--line)}
+.pessoa.p0{border-left-color:var(--p0)} .pessoa.p1{border-left-color:var(--p1)}
+.pessoa h3{margin:0 0 8px;font-size:16px}
+.linha{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;font-variant-numeric:tabular-nums}
+.linha span:first-child{color:var(--muted)}
+.linha.tot{border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-weight:700}
+.linha.tot span:first-child{color:var(--text)}
+.cat{display:grid;grid-template-columns:120px 1fr 96px;gap:10px;align-items:center;font-size:14px;padding:5px 0}
+.cat .bar{height:8px}
+.cat span:last-child{text-align:right;font-variant-numeric:tabular-nums}
+@media (max-width:480px){.cat{grid-template-columns:96px 1fr 84px}}
+.cc{margin-bottom:14px}
+.cc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.cc-head h3{margin:0;font-size:17px}
+.cc-total{font-size:24px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .small{font-size:12.5px}
+dialog{max-height:calc(100dvh - 32px);overflow:auto;border:1px solid var(--line);border-radius:18px;padding:0;background:var(--surface);color:var(--text);width:min(460px,calc(100vw - 32px));box-shadow:0 20px 60px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+dialog form{padding:18px}
+dialog h3{margin:0 0 14px;font-size:18px}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.field label{font-size:13px;color:var(--muted);font-weight:500}
+.field input,.field select{font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);width:100%}
+.field input:focus,.field select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.field .hint{font-size:12px;color:var(--muted)}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.fields .full{grid-column:1/-1}
+.dlg-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
+.cfg p{margin:0 0 10px;font-size:14px;color:var(--muted)}
+.cfg .acts{display:flex;gap:8px;flex-wrap:wrap}
+.proj{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+@media (max-width:640px){.proj{grid-template-columns:repeat(3,1fr)}}
+.proj div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
+.proj b{display:block;font-variant-numeric:tabular-nums;font-size:14px}
+.proj span{font-size:12px;color:var(--muted);text-transform:capitalize}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">Finanças<small id="brandSub">controle do casal</small></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn small" data-acao="buscar" title="Procurar em todos os meses (atalho: Ctrl+K)">🔎 Buscar</button><button class="btn small" id="arqStatus" data-acao="arquivo" title="Onde os dados estão salvos"></button></div>
+      <div class="mes">
+        <button class="icon" id="prev" aria-label="Mês anterior">‹</button>
+        <b id="mesLabel"></b>
+        <button class="icon" id="next" aria-label="Próximo mês">›</button>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" data-tab="resumo" aria-selected="true">Resumo</button>
+      <button class="tab" data-tab="entradas">Entradas</button>
+      <button class="tab" data-tab="gastos">Gastos do mês</button>
+      <button class="tab" data-tab="fixos">Gastos fixos</button>
+      <button class="tab" data-tab="cartoes">Cartões</button>
+      <button class="tab" data-tab="config">Ajustes</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="resumo" class="on"></section>
+  <section id="entradas"></section>
+  <section id="gastos"></section>
+  <section id="fixos"></section>
+  <section id="cartoes"></section>
+  <section id="config"></section>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlgForm">
+    <h3 id="dlgTitulo"></h3>
+    <div class="fields" id="dlgCampos"></div>
+    <div id="dlgInfo" class="alert ok" style="display:none;margin:0 0 12px"></div>
+    <div class="dlg-acts">
+      <button type="button" class="btn" id="dlgCancel">Cancelar</button>
+      <button type="submit" class="btn primary" id="dlgSalvar">Salvar</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast"></div>
+<input type="file" id="importFile" hidden>
+<input type="file" id="importCompras" hidden>
+<input type="file" id="juntarFile" hidden>
+
+<script>
+/* ============ Dados ============ */
+const KEY = 'financas-v1';
+// Os nomes das pessoas ficam só nos dados do aparelho (nunca no código publicado).
+let PESSOAS = ['Pessoa 1', 'Pessoa 2'];
+let RESP = [...PESSOAS, 'Casal'];
+const CATEGORIAS = ['Moradia', 'Contas da casa', 'Mercado', 'Alimentação fora', 'Transporte', 'Saúde', 'Impostos (DAS/MEI/INSS)', 'Trabalho', 'Educação', 'Assinaturas', 'Lazer', 'Compras', 'Pets', 'Outros'];
+const TIPOS_ENTRADA = ['Salário', 'Serviço / Freela', 'Pró-labore', 'Cliente fixo', 'Venda', 'Reembolso', 'Outros'];
+const FORMAS = { pix: 'Pix', boleto: 'Boleto', debito: 'Débito', dinheiro: 'Dinheiro' };
+const VAZIO = () => ({ receitas: [], fixos: [], cartoes: [], compras: [], gastos: [], pagos: {}, ajustes: {}, reserva: 0, divisao: '50', pctA: 50, pessoas: null });
+
+let db = carregar();
+let mes = hojeYM();
+let aba = 'resumo';
+
+function carregar() {
+  try {
+    let s = localStorage.getItem(KEY);
+    if (!s) { // dados de uma versão antiga, guardados com outro nome
+      const antiga = Object.keys(localStorage).find(k => k !== KEY && k.startsWith('financas-'));
+      if (antiga) { s = localStorage.getItem(antiga); localStorage.setItem(KEY, s); localStorage.removeItem(antiga); }
+    }
+    if (s) return Object.assign(VAZIO(), JSON.parse(s));
+  } catch (e) {}
+  return VAZIO();
+}
+// Descobre os nomes a partir dos próprios lançamentos (dados antigos) e guarda nos dados.
+function prepararPessoas() {
+  for (const k of Object.keys(db)) if (/^pct/.test(k) && k !== 'pctA') { if (db.pctA == null || db.pctA === 50) db.pctA = db[k]; delete db[k]; }
+  if (!Array.isArray(db.pessoas) || db.pessoas.length !== 2) {
+    const vistos = [];
+    const ver = n => { if (n && n !== 'Casal' && !vistos.includes(n)) vistos.push(n); };
+    db.receitas.forEach(r => ver(r.pessoa)); db.cartoes.forEach(c => ver(c.titular));
+    [...db.fixos, ...db.compras, ...db.gastos].forEach(x => ver(x.pessoa));
+    db.pessoas = [vistos[0] || 'Pessoa 1', vistos[1] || 'Pessoa 2'];
+  }
+  PESSOAS = [...db.pessoas]; RESP = [...PESSOAS, 'Casal'];
+  const sub = document.getElementById('brandSub'); if (sub) sub.textContent = `${PESSOAS[0]} & ${PESSOAS[1]}`;
+}
+function renomearPessoa(i, novo) {
+  novo = String(novo || '').trim(); const velho = PESSOAS[i];
+  if (!novo || novo === velho || novo === 'Casal' || PESSOAS.includes(novo)) return false;
+  const troca = o => { if (o.pessoa === velho) o.pessoa = novo; if (o.titular === velho) o.titular = novo; };
+  [...db.receitas, ...db.fixos, ...db.cartoes, ...db.compras, ...db.gastos].forEach(troca);
+  db.pessoas[i] = novo; prepararPessoas(); return true;
+}
+function salvar() {
+  prepararPessoas();
+  try { localStorage.setItem(KEY, JSON.stringify(db)); }
+  catch (e) { toast('Não consegui salvar neste navegador. Faça um backup em Ajustes.'); }
+  gravarArquivo();
+  render();
+}
+
+/* ============ Arquivo no PC ============ */
+// Grava os dados num arquivo .json escolhido no computador (Chrome/Edge).
+const celular = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+const temFS = 'showSaveFilePicker' in window && !celular;
+let arq = null;          // FileSystemFileHandle
+let arqPronto = false;   // permissão concedida nesta sessão
+const TIPO_JSON = [{ description: 'Dados das finanças', accept: { 'application/json': ['.json'] } }];
+function idb(modo, fn) {
+  return new Promise((ok, erro) => {
+    const r = indexedDB.open('financas-yt', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onerror = () => erro(r.error);
+    r.onsuccess = () => { const tx = r.result.transaction('kv', modo), q = fn(tx.objectStore('kv')); tx.oncomplete = () => ok(q && q.result); tx.onerror = () => erro(tx.error); };
+  });
+}
+const lembrarArquivo = h => idb('readwrite', st => st.put(h, 'arquivo')).catch(() => {});
+let gravando = Promise.resolve();
+function gravarArquivo() {
+  if (!arq || !arqPronto) return;
+  const conteudo = JSON.stringify({ ...db, salvoEm: new Date().toISOString() }, null, 2);
+  gravando = gravando.then(async () => {
+    const w = await arq.createWritable(); await w.write(conteudo); await w.close();
+  }).catch(() => { arqPronto = false; statusArquivo(); toast('Não consegui gravar no arquivo. Clique no botão lá em cima para reconectar.'); });
+}
+async function lerArquivo(h) {
+  const d = lerJSON(await (await h.getFile()).text() || '{}');
+  if (d && Array.isArray(d.receitas)) { delete d.salvoEm; db = Object.assign(VAZIO(), d); prepararPessoas(); localStorage.setItem(KEY, JSON.stringify(db)); return true; }
+  return false;
+}
+function statusArquivo() {
+  const b = $('#arqStatus');
+  if (!temFS) { b.className = 'btn small ok'; b.textContent = celular ? '📱 Salvo neste celular' : '✓ Salvo neste navegador'; return; }
+  if (arq && arqPronto) { b.className = 'btn small ok'; b.textContent = '✓ Salvo em ' + arq.name; }
+  else if (arq) { b.className = 'btn small warn'; b.textContent = '↻ Reconectar ' + arq.name; }
+  else { b.className = 'btn small warn'; b.textContent = '💾 Salvar num arquivo do PC'; }
+}
+async function acaoArquivo() {
+  if (!temFS) { aba = 'config'; render(); return toast(celular ? 'Os dados ficam guardados só neste celular' : 'Os dados ficam guardados neste navegador'); }
+  try {
+    if (arq && !arqPronto) {
+      if (await arq.requestPermission({ mode: 'readwrite' }) !== 'granted') return;
+      arqPronto = true; await lerArquivo(arq); statusArquivo(); render(); toast('Conectado a ' + arq.name); return;
+    }
+    if (arq && arqPronto) { aba = 'config'; render(); return; }
+    escolherArquivo();
+  } catch (e) { if (e.name !== 'AbortError') toast('Não consegui abrir o arquivo'); }
+}
+async function escolherArquivo(abrirExistente) {
+  try {
+    let h;
+    if (abrirExistente) {
+      [h] = await window.showOpenFilePicker({ types: TIPO_JSON });
+      let conteudo = null; try { conteudo = lerJSON(await (await h.getFile()).text()); } catch {}
+      if (ehArquivoDeFaturas(conteudo)) { if (!arqPronto && arq) toast('Clique em Reconectar antes, para salvar no arquivo do PC'); return importarFaturas(conteudo); }
+      if (!await lerArquivo(h)) return toast('Esse arquivo não é das finanças');
+      if (await h.requestPermission({ mode: 'readwrite' }) !== 'granted') return;
+    } else {
+      h = await window.showSaveFilePicker({ suggestedName: 'financas-dados.json', types: TIPO_JSON });
+    }
+    arq = h; arqPronto = true; lembrarArquivo(h);
+    salvar(); statusArquivo(); toast('Agora tudo é salvo em ' + h.name);
+  } catch (e) { if (e.name !== 'AbortError') toast('Não consegui usar esse arquivo'); }
+}
+async function iniciarArquivo() {
+  if (!temFS) return statusArquivo();
+  try {
+    const h = await idb('readonly', st => st.get('arquivo'));
+    if (h) {
+      arq = h;
+      if (await h.queryPermission({ mode: 'readwrite' }) === 'granted') { arqPronto = true; await lerArquivo(h); render(); }
+    }
+  } catch (e) {}
+  statusArquivo();
+}
+
+/* ============ Utilidades ============ */
+const $ = s => document.querySelector(s);
+function pad(n) { return String(n).padStart(2, '0'); }
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const brl = v => (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const soma = (arr, f = x => x.valor) => arr.reduce((t, x) => t + (Number(f(x)) || 0), 0);
+const r2 = v => Math.round(v * 100) / 100;
+function hojeYM() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; }
+function hojeISO() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+const ymDe = data => (data || '').slice(0, 7);
+function addM(ym, n) {
+  let [y, m] = ym.split('-').map(Number);
+  const t = y * 12 + (m - 1) + n;
+  return `${Math.floor(t / 12)}-${pad(t % 12 + 1)}`;
+}
+function difM(a, b) { const [ya, ma] = a.split('-').map(Number), [yb, mb] = b.split('-').map(Number); return (ya * 12 + ma) - (yb * 12 + mb); }
+function nomeMes(ym, curto) {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('pt-BR', curto ? { month: 'short' } : { month: 'long', year: 'numeric' }).replace('.', '');
+}
+function dataBR(iso) { if (!iso) return ''; const [y, m, d] = iso.split('-'); return `${d}/${m}`; }
+function lerValor(s) {
+  s = String(s ?? '').trim().replace(/[R$\s]/g, '');
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  const n = Number(s);
+  return isFinite(n) ? r2(n) : NaN;
+}
+const valorTxt = v => v || v === 0 ? Number(v).toFixed(2).replace('.', ',') : '';
+const ehCartao = f => typeof f === 'string' && f.startsWith('card_');
+const cartaoPor = id => db.cartoes.find(c => c.id === id);
+function nomeForma(f) { if (ehCartao(f)) { const c = cartaoPor(f); return c ? 'Cartão ' + c.nome : 'Cartão removido'; } return FORMAS[f] || f || ''; }
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 2600); }
+const classePessoa = p => p === 'Casal' ? 'Casal' : ['p0', 'p1'][PESSOAS.indexOf(p)] || '';
+const tag = p => `<span class="tag ${classePessoa(p)}">${esc(p)}</span>`;
+const tagDup = '<span class="tag prev">possível duplicado</span>';
+// Chave para achar lançamentos repetidos (mesma data, valor e forma; o nome pode ser diferente)
+const chaveCompra = c => `c|${c.cartaoId}|${c.data}|${Number(c.valor).toFixed(2)}|${c.parcelas || 1}`;
+const chaveGasto = g => `g|${g.forma}|${g.data}|${Number(g.valor).toFixed(2)}`;
+function gruposDuplicados() {
+  const mapa = new Map();
+  for (const c of db.compras) { const k = chaveCompra(c); mapa.set(k, [...(mapa.get(k) || []), { ...c, col: 'compras' }]); }
+  for (const g of db.gastos) { const k = chaveGasto(g); mapa.set(k, [...(mapa.get(k) || []), { ...g, col: 'gastos' }]); }
+  return [...mapa.values()].filter(gr => gr.length > 1).sort((a, b) => a[0].data.localeCompare(b[0].data));
+}
+const idsDuplicados = () => new Set(gruposDuplicados().flat().map(x => x.id));
+
+/* ============ Regras de negócio ============ */
+// Fixos que valem no mês, já com o valor do mês (ajuste) e o número da parcela (financiamentos)
+function fixosAtivos(ym) {
+  const out = [];
+  for (const f of db.fixos) {
+    if (ym < f.inicio || (f.fim && ym > f.fim)) continue;
+    let parcelaN = null;
+    if (f.parcelasTotal) {
+      parcelaN = (Number(f.parcelaInicial) || 1) + difM(ym, f.inicio);
+      if (parcelaN > f.parcelasTotal) continue;
+    }
+    const aj = db.ajustes?.[ym]?.[f.id];
+    out.push({ ...f, valor: aj ?? f.valor, valorPadrao: f.valor, ajustado: aj != null, parcelaTxt: parcelaN ? `${parcelaN}/${f.parcelasTotal}` : '' });
+  }
+  return out;
+}
+// Último mês de um financiamento
+const fimParcelas = f => f.parcelasTotal ? addM(f.inicio, f.parcelasTotal - (Number(f.parcelaInicial) || 1)) : null;
+
+// Mês em que vence a 1ª parcela de uma compra no cartão
+function mesPrimeiraParcela(compra, cartao) {
+  if (compra.primeiraParcela) return compra.primeiraParcela; // compra antiga lançada como "parcela X"
+  const [y, m, d] = compra.data.split('-').map(Number);
+  let fecha = `${y}-${pad(m)}`;
+  if (d >= Number(cartao.fechamento)) fecha = addM(fecha, 1); // comprou no dia do fechamento ou depois -> próxima fatura
+  return Number(cartao.vencimento) > Number(cartao.fechamento) ? fecha : addM(fecha, 1);
+}
+function valorParcela(compra, i) {
+  const p = Number(compra.parcelas) || 1;
+  const base = Math.floor(Math.round(compra.valor * 100) / p) / 100; // evita erro de centavo (269,40 / 3 = 89,80)
+  return i === p - 1 ? r2(compra.valor - base * (p - 1)) : base;
+}
+// Itens que caem na fatura de um cartão num mês (mês de vencimento)
+function itensFatura(cartaoId, ym) {
+  const c = cartaoPor(cartaoId); if (!c) return [];
+  const itens = [];
+  for (const cp of db.compras.filter(x => x.cartaoId === cartaoId)) {
+    const i = difM(ym, mesPrimeiraParcela(cp, c));
+    const p = Number(cp.parcelas) || 1;
+    let falta = 0; for (let j = i + 1; j < p; j++) falta += valorParcela(cp, j);
+    if (i >= 0 && i < p) itens.push({ ref: cp, tipo: 'compra', descricao: cp.descricao, valor: valorParcela(cp, i), falta: r2(falta), parcela: p > 1 ? `${i + 1}/${p}` : '', pessoa: cp.pessoa, categoria: cp.categoria, data: cp.data });
+  }
+  for (const f of fixosAtivos(ym).filter(f => f.forma === cartaoId))
+    itens.push({ ref: f, tipo: 'fixo', descricao: f.nome, valor: f.valor, parcela: f.parcelaTxt || 'fixo', pessoa: f.pessoa, categoria: f.categoria, ordem: `${ym}-${pad(f.dia || 1)}` });
+  // ordem cronológica, como no extrato do banco (mais antiga primeiro)
+  return itens.sort((a, b) => (a.data || a.ordem).localeCompare(b.data || b.ordem));
+}
+const totalFatura = (cartaoId, ym) => r2(soma(itensFatura(cartaoId, ym)));
+
+// Todas as saídas do mês, item a item
+function saidasDoMes(ym) {
+  const out = [];
+  for (const f of fixosAtivos(ym).filter(f => !ehCartao(f.forma))) out.push({ descricao: f.nome, valor: f.valor, pessoa: f.pessoa, categoria: f.categoria, origem: 'fixo' });
+  for (const g of db.gastos.filter(g => ymDe(g.data) === ym)) out.push({ descricao: g.descricao, valor: g.valor, pessoa: g.pessoa, categoria: g.categoria, origem: 'gasto' });
+  for (const c of db.cartoes) for (const it of itensFatura(c.id, ym)) out.push({ ...it, origem: 'cartao' });
+  return out;
+}
+// Contas para pagar no mês: fixos (fora do cartão) + faturas
+function contasDoMes(ym) {
+  const pagos = db.pagos[ym] || {};
+  const contas = fixosAtivos(ym).filter(f => !ehCartao(f.forma)).map(f => ({ chave: 'f:' + f.id, nome: f.nome + (f.parcelaTxt ? ` (${f.parcelaTxt})` : ''), valor: f.valor, dia: Number(f.dia) || 1, pessoa: f.pessoa, info: nomeForma(f.forma) }));
+  for (const c of db.cartoes) {
+    const v = totalFatura(c.id, ym);
+    if (v > 0) contas.push({ chave: 'c:' + c.id, nome: 'Fatura ' + c.nome, valor: v, dia: Number(c.vencimento), pessoa: c.titular, info: 'cartão' });
+  }
+  contas.forEach(c => c.pago = !!pagos[c.chave]);
+  return contas.sort((a, b) => a.dia - b.dia);
+}
+// Parte que vai para a casa (ex.: salário 3.500, para a casa 2.500). O resto é da pessoa e não entra nas contas.
+const paraCasa = r => (r.paraCasa != null && r.paraCasa >= 0 && r.paraCasa < r.valor) ? r.paraCasa : r.valor;
+const entradasDoMes = ym => db.receitas.filter(r => ymDe(r.data) === ym).map(r => ({ ...r, bruto: r.valor, valor: paraCasa(r) }));
+
+// Divide o valor de um item do Casal entre as duas pessoas
+function fatiaCasal(ym) {
+  const [A, B] = PESSOAS;
+  if (db.divisao === 'fixo') { const y = Math.min(100, Math.max(0, Number(db.pctA ?? 50))) / 100; return { [A]: y, [B]: 1 - y }; }
+  if (db.divisao === 'proporcional') {
+    const e = entradasDoMes(ym);
+    const y = soma(e.filter(r => r.pessoa === A)), t = soma(e.filter(r => r.pessoa === B));
+    if (y + t > 0) return { [A]: y / (y + t), [B]: t / (y + t) };
+  }
+  return { [A]: .5, [B]: .5 };
+}
+function porPessoa(ym) {
+  const f = fatiaCasal(ym), res = {};
+  for (const p of PESSOAS) res[p] = { entradas: 0, proprios: 0, casal: 0 };
+  for (const r of entradasDoMes(ym)) if (res[r.pessoa]) res[r.pessoa].entradas += r.valor;
+  for (const s of saidasDoMes(ym)) {
+    if (s.pessoa === 'Casal') for (const p of PESSOAS) res[p].casal += s.valor * f[p];
+    else if (res[s.pessoa]) res[s.pessoa].proprios += s.valor;
+  }
+  return { res, f };
+}
+const comprometido = ym => r2(soma(fixosAtivos(ym)) + soma(db.cartoes, c => soma(itensFatura(c.id, ym).filter(i => i.tipo === 'compra'))));
+
+/* ============ Render ============ */
+function render() {
+  const nm = nomeMes(mes); $('#mesLabel').textContent = nm[0].toUpperCase() + nm.slice(1);
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === aba));
+  document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === aba));
+  ({ resumo: rResumo, entradas: rEntradas, gastos: rGastos, fixos: rFixos, cartoes: rCartoes, config: rConfig })[aba]();
+}
+
+function rResumo() {
+  const ent = entradasDoMes(mes);
+  const recebido = soma(ent.filter(r => r.status !== 'previsto'));
+  const aReceber = soma(ent.filter(r => r.status === 'previsto'));
+  const saidas = saidasDoMes(mes);
+  const totSaidas = r2(soma(saidas));
+  const saldo = r2(recebido + aReceber - totSaidas);
+  const contas = contasDoMes(mes);
+  const aPagar = r2(soma(contas.filter(c => !c.pago)));
+  const falta = r2(totSaidas - recebido - aReceber);
+
+  // média de entradas dos últimos 3 meses (com algum lançamento)
+  const ult = [1, 2, 3].map(k => soma(entradasDoMes(addM(mes, -k)))).filter(v => v > 0);
+  const media = ult.length ? soma(ult, x => x) / ult.length : 0;
+  const custoBase = totSaidas || comprometido(mes);
+  const mesesReserva = custoBase > 0 ? db.reserva / custoBase : 0;
+
+  const cobertura = totSaidas > 0 ? Math.min(100, (recebido + aReceber) / totSaidas * 100) : 100;
+  let alerta;
+  if (totSaidas === 0 && recebido + aReceber === 0) alerta = `<div class="alert warn">Comece cadastrando os <b>gastos fixos</b>, os <b>cartões</b> e as <b>entradas</b> do mês — o resumo se monta sozinho.</div>`;
+  else if (falta > 0) alerta = `<div class="alert bad">Falta <b>${brl(falta)}</b> de entradas para fechar ${nomeMes(mes).split(' ')[0]}. ${media ? `A média dos últimos meses foi ${brl(media)}.` : ''}</div>`;
+  else alerta = `<div class="alert ok">Mês coberto! Sobram <b>${brl(saldo)}</b>${aReceber ? ` (contando ${brl(aReceber)} ainda a receber)` : ''}. Que tal mandar uma parte para a reserva?</div>`;
+
+  const { res, f } = porPessoa(mes);
+  const cardPessoa = p => {
+    const r = res[p], gasto = r.proprios + r.casal, s = r.entradas - gasto;
+    return `<div class="card pessoa ${classePessoa(p)}"><h3>${esc(p)}</h3>
+      <div class="linha"><span>Entradas</span><span>${brl(r.entradas)}</span></div>
+      <div class="linha"><span>Gastos próprios</span><span>${brl(r.proprios)}</span></div>
+      <div class="linha"><span>Parte nos gastos do casal (${Math.round(f[p] * 100)}%)</span><span>${brl(r.casal)}</span></div>
+      <div class="linha tot"><span>Saldo</span><span class="${s < 0 ? 'neg' : 'pos'}">${brl(s)}</span></div></div>`;
+  };
+
+  // categorias
+  const cats = {};
+  for (const s of saidas) cats[s.categoria || 'Outros'] = (cats[s.categoria || 'Outros'] || 0) + s.valor;
+  const catArr = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+  const maxCat = catArr.length ? catArr[0][1] : 1;
+
+  const hoje = new Date(), ehMesAtual = mes === hojeYM();
+  const contasHtml = contas.length ? contas.map(c => {
+    const atrasado = !c.pago && (difM(mes, hojeYM()) < 0 || (ehMesAtual && c.dia < hoje.getDate()));
+    return `<div class="item ${c.pago ? 'done' : ''} ${atrasado ? 'late' : ''}">
+      <input type="checkbox" class="chk" data-pagar="${c.chave}" ${c.pago ? 'checked' : ''} aria-label="Marcar ${esc(c.nome)} como pago">
+      <div class="main"><div class="t">${esc(c.nome)}</div><div class="s"><span class="due">dia ${c.dia}${atrasado ? ' · atrasado' : ''}</span>· ${esc(c.info)} ${tag(c.pessoa)}</div></div>
+      <div class="v">${brl(c.valor)}</div></div>`;
+  }).join('') : `<div class="empty">Nenhuma conta neste mês.</div>`;
+
+  const proj = [1, 2, 3, 4, 5, 6].map(k => { const m = addM(mes, k); return `<div><span>${nomeMes(m, true)}</span><b>${brl(comprometido(m))}</b></div>`; }).join('');
+
+  $('#resumo').innerHTML = `
+    <div class="grid kpis">
+      <div class="card kpi"><div class="lbl">Entradas</div><div class="val">${brl(recebido + aReceber)}</div><div class="sub">${brl(recebido)} recebido${aReceber ? ` · ${brl(aReceber)} a receber` : ''}</div></div>
+      <div class="card kpi"><div class="lbl">Saídas</div><div class="val">${brl(totSaidas)}</div><div class="sub">${brl(aPagar)} ainda a pagar</div></div>
+      <div class="card kpi"><div class="lbl">Saldo previsto</div><div class="val ${saldo < 0 ? 'neg' : 'pos'}">${brl(saldo)}</div><div class="sub">entradas − saídas</div></div>
+      <div class="card kpi"><div class="lbl">Reserva</div><div class="val">${brl(db.reserva)}</div><div class="sub">${custoBase ? `cobre ${mesesReserva.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${mesesReserva >= 0.95 && mesesReserva < 1.05 ? 'mês' : 'meses'} de gastos` : 'defina em Ajustes'}</div></div>
+    </div>
+    <div class="card meta">
+      <div class="linha" style="padding-bottom:8px"><span>Quanto das saídas do mês já está coberto pelas entradas</span><b>${Math.round(cobertura)}%</b></div>
+      <div class="bar ${cobertura < 60 ? 'bad' : cobertura < 100 ? 'warn' : ''}"><i style="width:${cobertura}%"></i></div>
+      ${alerta}
+    </div>
+
+    <h2>Cada um</h2>
+    <div class="grid two">${PESSOAS.map(cardPessoa).join('')}</div>
+
+    <div class="row-head"><h2>Contas para pagar</h2><span class="small muted">${contas.filter(c => c.pago).length}/${contas.length} pagas</span></div>
+    <div class="list">${contasHtml}</div>
+
+    <h2>Para onde foi o dinheiro</h2>
+    <div class="card">${catArr.length ? catArr.map(([c, v]) => `<div class="cat"><span>${esc(c)}</span><div class="bar"><i style="width:${v / maxCat * 100}%"></i></div><span>${brl(v)}</span></div>`).join('') : '<div class="empty">Sem gastos neste mês ainda.</div>'}</div>
+
+    <h2>Já comprometido nos próximos meses</h2>
+    <div class="card"><p class="small muted" style="margin:0 0 10px">Gastos fixos + parcelas de cartão já lançadas. É o mínimo que vocês precisam faturar em cada mês.</p><div class="proj">${proj}</div></div>
+  `;
+}
+
+function rEntradas() {
+  const ent = entradasDoMes(mes).sort((a, b) => b.data.localeCompare(a.data));
+  const tot = p => soma(ent.filter(r => r.pessoa === p));
+  const fica = p => r2(soma(ent.filter(r => r.pessoa === p), r => r.bruto - r.valor));
+  $('#entradas').innerHTML = `
+    <div class="grid kpis">
+      ${PESSOAS.map(p => `<div class="card kpi"><div class="lbl">${p} · para a casa</div><div class="val">${brl(tot(p))}</div>${fica(p) > 0 ? `<div class="sub">+ ${brl(fica(p))} fica com ${esc(p)}</div>` : ''}</div>`).join('')}
+      <div class="card kpi"><div class="lbl">Total para a casa</div><div class="val">${brl(soma(ent))}</div></div>
+      <div class="card kpi"><div class="lbl">A receber</div><div class="val">${brl(soma(ent.filter(r => r.status === 'previsto')))}</div></div>
+    </div>
+    <div class="row-head"><h2>Entradas de ${nomeMes(mes)}</h2><button class="btn primary" data-acao="novaEntrada">+ Entrada</button></div>
+    <p class="small muted" style="margin:-4px 0 10px">Como vocês são autônomos, lance cada pagamento quando ele cair. Pagamento combinado que ainda não caiu? Lance como <b>a receber</b> e marque quando entrar.</p>
+    <div class="list">${ent.length ? ent.map(r => `
+      <div class="item">
+        <input type="checkbox" class="chk" data-receber="${r.id}" ${r.status !== 'previsto' ? 'checked' : ''} aria-label="Recebido">
+        <div class="main"><div class="t">${esc(r.descricao || r.tipo)}</div><div class="s">${dataBR(r.data)} · ${esc(r.tipo)} ${tag(r.pessoa)} ${r.status === 'previsto' ? '<span class="tag prev">a receber</span>' : ''}</div></div>
+        <div class="v pos">${brl(r.valor)}${r.bruto > r.valor ? `<div class="small muted" style="font-weight:400;text-align:right">de ${brl(r.bruto)}</div>` : ''}</div>
+        <div class="acts"><button class="icon" data-editar="receitas:${r.id}" aria-label="Editar">✎</button><button class="icon" data-excluir="receitas:${r.id}" aria-label="Excluir">✕</button></div>
+      </div>`).join('') : '<div class="empty">Nenhuma entrada neste mês.</div>'}</div>`;
+}
+
+function rGastos() {
+  const lista = [
+    ...db.gastos.filter(g => ymDe(g.data) === mes).map(g => ({ ...g, col: 'gastos', info: nomeForma(g.forma) })),
+    ...db.compras.filter(c => ymDe(c.data) === mes).map(c => ({ ...c, col: 'compras', info: nomeForma(c.cartaoId) + (c.parcelas > 1 ? ` · ${c.parcelas}x de ${brl(valorParcela(c, 0))}` : '') })),
+  ].sort((a, b) => b.data.localeCompare(a.data));
+  const tot = p => soma(lista.filter(g => g.pessoa === p));
+  const dups = idsDuplicados();
+  $('#gastos').innerHTML = `
+    <div class="grid kpis">
+      ${RESP.map(p => `<div class="card kpi"><div class="lbl">${p}</div><div class="val">${brl(tot(p))}</div></div>`).join('')}
+      <div class="card kpi"><div class="lbl">Total</div><div class="val">${brl(soma(lista))}</div></div>
+    </div>
+    <div class="row-head"><h2>Gastos feitos em ${nomeMes(mes)}</h2><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn" data-acao="duplicados">Procurar duplicados${dups.size ? ` (${gruposDuplicados().length})` : ''}</button><button class="btn primary" data-acao="novoGasto">+ Gasto</button></div></div>
+    <p class="small muted" style="margin:-4px 0 10px">Mercado, uber, farmácia, compras… Se pagou no cartão, escolha o cartão e as parcelas — ele vai sozinho para as faturas certas.</p>
+    <div class="list">${lista.length ? lista.map(g => `
+      <div class="item">
+        <div class="main"><div class="t">${esc(g.descricao)}</div><div class="s">${dataBR(g.data)} · ${esc(g.categoria)} · ${esc(g.info)} ${tag(g.pessoa)} ${dups.has(g.id) ? tagDup : ''}</div></div>
+        <div class="v">${brl(g.valor)}</div>
+        <div class="acts"><button class="icon" data-editar="${g.col}:${g.id}" aria-label="Editar">✎</button><button class="icon" data-excluir="${g.col}:${g.id}" aria-label="Excluir">✕</button></div>
+      </div>`).join('') : '<div class="empty">Nenhum gasto lançado neste mês.</div>'}</div>`;
+}
+
+function rFixos() {
+  const ativos = fixosAtivos(mes).sort((a, b) => a.dia - b.dia);
+  const ids = new Set(ativos.map(f => f.id)), outros = db.fixos.filter(f => !ids.has(f.id));
+  const linha = (f, ativo) => `
+    <div class="item">
+      <div class="main"><div class="t">${esc(f.nome)}</div><div class="s">dia ${f.dia} · ${esc(f.categoria)} · ${esc(nomeForma(f.forma))} ${tag(f.pessoa)} ${f.parcelaTxt ? `<span class="tag">parcela ${f.parcelaTxt}</span>` : ''} ${!ativo ? `<span class="tag">${f.inicio > mes ? 'começa em ' + nomeMes(f.inicio) : 'encerrado em ' + nomeMes(f.fim || fimParcelas(f))}</span>` : ''}</div></div>
+      <div class="v">${brl(f.valor)}${f.ajustado ? `<div class="small muted" style="font-weight:400;text-align:right">padrão ${brl(f.valorPadrao)}</div>` : ''}</div>
+      <div class="acts">
+        <button class="icon" data-editar="fixos:${f.id}" aria-label="Editar">✎</button>
+        ${ativo ? `<button class="icon" data-ajustar="${f.id}" aria-label="Valor deste mês" title="Mudar o valor só neste mês (luz, água…)">$</button>` : ''}
+        ${ativo ? `<button class="icon" data-encerrar="${f.id}" aria-label="Encerrar" title="Encerrar a partir deste mês">⏹</button>` : ''}
+        <button class="icon" data-excluir="fixos:${f.id}" aria-label="Excluir">✕</button>
+      </div>
+    </div>`;
+  const tot = p => soma(ativos.filter(f => f.pessoa === p));
+  $('#fixos').innerHTML = `
+    <div class="grid kpis">
+      ${RESP.map(p => `<div class="card kpi"><div class="lbl">${p}</div><div class="val">${brl(tot(p))}</div></div>`).join('')}
+      <div class="card kpi"><div class="lbl">Total fixo / mês</div><div class="val">${brl(soma(ativos))}</div></div>
+    </div>
+    <div class="row-head"><h2>Fixos em ${nomeMes(mes)}</h2><button class="btn primary" data-acao="novoFixo">+ Gasto fixo</button></div>
+    <p class="small muted" style="margin:-4px 0 10px">Aluguel, condomínio, luz, internet, celular, DAS do MEI, academia, assinaturas… Cadastre uma vez e ele aparece todo mês. Conta que muda de valor (luz, água)? Use <b>$</b> para mudar só o valor deste mês. Financiamento? Informe as parcelas e ele some sozinho na última. Se acabar, use ⏹ para encerrar sem apagar o histórico.</p>
+    <div class="list">${ativos.length ? ativos.map(f => linha(f, true)).join('') : '<div class="empty">Nenhum gasto fixo cadastrado.</div>'}</div>
+    ${outros.length ? `<h2>Fora deste mês</h2><div class="list">${outros.map(f => linha(f, false)).join('')}</div>` : ''}`;
+}
+
+function rCartoes() {
+  const dups = idsDuplicados();
+  const hoje = hojeYM();
+  const blocos = db.cartoes.map(c => {
+    const itens = itensFatura(c.id, mes);
+    const total = r2(soma(itens));
+    // limite usado: tudo que ainda vai vencer a partir do mês atual
+    let usado = 0;
+    for (const cp of db.compras.filter(x => x.cartaoId === c.id)) {
+      const p = Number(cp.parcelas) || 1, ini = mesPrimeiraParcela(cp, c);
+      for (let i = 0; i < p; i++) if (difM(addM(ini, i), hoje) >= 0) usado += valorParcela(cp, i);
+    }
+    const pct = c.limite > 0 ? Math.min(100, usado / c.limite * 100) : 0;
+    const pago = !!(db.pagos[mes] || {})['c:' + c.id];
+    return `<div class="card cc">
+      <div class="cc-head">
+        <div><h3>${esc(c.nome)} ${tag(c.titular)}</h3><div class="small muted">fecha dia ${c.fechamento} · vence dia ${c.vencimento}</div></div>
+        <div class="acts"><button class="icon" data-editar="cartoes:${c.id}" aria-label="Editar cartão">✎</button><button class="icon" data-excluir="cartoes:${c.id}" aria-label="Excluir cartão">✕</button></div>
+      </div>
+      <div style="margin:12px 0 4px" class="small muted">Fatura que vence em ${nomeMes(mes)}</div>
+      <div class="cc-total">${brl(total)} ${total > 0 ? `<label class="small muted" style="font-weight:400;margin-left:8px"><input type="checkbox" class="chk" style="vertical-align:middle;width:18px;height:18px" data-pagar="c:${c.id}" ${pago ? 'checked' : ''}> paga</label>` : ''}</div>
+      ${c.limite > 0 ? `<div style="margin-top:12px"><div class="linha small"><span>Limite usado</span><span>${brl(usado)} de ${brl(c.limite)}</span></div><div class="bar ${pct > 85 ? 'bad' : pct > 60 ? 'warn' : ''}"><i style="width:${pct}%"></i></div></div>` : ''}
+      <div class="list" style="margin-top:14px;box-shadow:none">${itens.length ? itens.map(i => `
+        <div class="item">
+          <div class="main"><div class="t">${esc(i.descricao)}</div><div class="s">${i.data ? dataBR(i.data) + ' · ' : ''}${esc(i.categoria)} ${i.parcela ? `<span class="tag">${i.parcela}</span>` : ''} ${tag(i.pessoa)} ${i.falta > 0 ? `<span>· faltam ${brl(i.falta)}</span>` : ''} ${i.tipo === 'compra' && dups.has(i.ref.id) ? tagDup : ''}</div></div>
+          <div class="v">${brl(i.valor)}</div>
+          ${i.tipo === 'compra' ? `<div class="acts"><button class="icon" data-editar="compras:${i.ref.id}" aria-label="Editar">✎</button><button class="icon" data-excluir="compras:${i.ref.id}" aria-label="Excluir">✕</button></div>` : ''}
+        </div>`).join('') : '<div class="empty">Nada nesta fatura.</div>'}</div>
+    </div>`;
+  }).join('');
+  $('#cartoes').innerHTML = `
+    <div class="row-head" style="margin-top:4px"><h2>Cartões de crédito</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${db.cartoes.length ? `<button class="btn" data-acao="duplicados">Procurar duplicados${dups.size ? ` (${gruposDuplicados().length})` : ''}</button><button class="btn" data-acao="novoGasto">+ Compra</button>` : ''}<button class="btn primary" data-acao="novoCartao">+ Cartão</button></div></div>
+    <p class="small muted" style="margin:-4px 0 12px">Compras feitas no dia do fechamento ou depois vão para a fatura seguinte. Use as setas lá em cima para ver as faturas dos próximos meses.</p>
+    ${blocos || '<div class="list"><div class="empty">Cadastre os cartões de vocês com dia de fechamento e vencimento.</div></div>'}`;
+}
+
+function rConfig() {
+  $('#config').innerHTML = `
+    <div class="grid two cfg">
+      <div class="card"><h2>Nomes</h2>
+        <p>Os nomes ficam guardados só neste aparelho, junto com os lançamentos.</p>
+        <div class="fields" style="grid-template-columns:1fr 1fr"><div class="field"><label for="cfgNome0">Pessoa 1</label><input id="cfgNome0" value="${esc(PESSOAS[0])}"></div>
+        <div class="field"><label for="cfgNome1">Pessoa 2</label><input id="cfgNome1" value="${esc(PESSOAS[1])}"></div></div>
+      </div>
+      <div class="card"><h2>Gastos do casal</h2>
+        <p>Como dividir o que é marcado como <b>Casal</b> (aluguel, mercado, contas da casa…)?</p>
+        <div class="field"><select id="cfgDivisao">
+          <option value="50" ${db.divisao === '50' ? 'selected' : ''}>Meio a meio (50% / 50%)</option>
+          <option value="fixo" ${db.divisao === 'fixo' ? 'selected' : ''}>Percentual fixo (ex.: 60% / 40%)</option>
+          <option value="proporcional" ${db.divisao === 'proporcional' ? 'selected' : ''}>Proporcional ao que cada um recebeu no mês</option>
+        </select></div>
+        ${db.divisao === 'fixo' ? `<div class="field"><label for="cfgPct">Parte de ${esc(PESSOAS[0])} (%) — ${esc(PESSOAS[1])} fica com o resto</label><input id="cfgPct" type="number" min="0" max="100" value="${Number(db.pctA ?? 50)}"></div>` : ''}
+        <p class="small">O proporcional é bom para quem é autônomo: no mês em que um fatura mais, ele cobre uma parte maior.</p>
+      </div>
+      <div class="card"><h2>Reserva de emergência</h2>
+        <p>Sem salário fixo, a reserva é o que segura os meses fracos. O ideal é cobrir de 6 a 12 meses de gastos.</p>
+        <div class="field"><label for="cfgReserva">Quanto vocês têm guardado hoje</label><input id="cfgReserva" inputmode="decimal" value="${valorTxt(db.reserva)}" placeholder="0,00"></div>
+        <button class="btn primary" data-acao="salvarReserva">Atualizar reserva</button>
+      </div>
+      <div class="card"><h2>Arquivo no computador</h2>
+        ${!temFS ? '<p>Para salvar num arquivo do PC, abra este sistema no <b>Google Chrome</b> ou no <b>Microsoft Edge</b>. Aqui os dados ficam só no navegador.</p>'
+          : arq ? `<p>Tudo o que vocês lançam é gravado automaticamente em <b>${esc(arq.name)}</b>${arqPronto ? '' : ' (clique em “Reconectar” lá em cima)'}. Guardem esse arquivo numa pasta fácil e, de vez em quando, copiem para um pendrive ou HD externo como cópia de segurança.</p>`
+          : '<p>Escolham uma pasta no PC (ex.: Documentos › Finanças) e o sistema grava tudo num arquivo <b>.json</b> sozinho, a cada mudança. Na próxima vez que abrirem, ele carrega os meses anteriores desse arquivo.</p>'}
+        ${temFS ? '<div class="acts"><button class="btn primary" data-acao="novoArquivo">Criar arquivo novo</button><button class="btn" data-acao="abrirArquivo">Abrir arquivo existente</button></div>' : ''}
+      </div>
+      <div class="card"><h2>Lançar fatura de um arquivo</h2>
+        <p>Adiciona compras de um arquivo (ex.: uma fatura que o Claude montou para vocês) <b>sem apagar nada</b>. Compras que já estão lançadas são puladas.</p>
+        <button class="btn primary" data-acao="importarCompras">Adicionar compras de um arquivo</button>
+      </div>
+      <div class="card"><h2>Celular ⇄ computador</h2>
+        <p>Cada aparelho guarda os próprios dados. Para levar os lançamentos de um para o outro: no aparelho de origem toque em <b>Exportar backup</b> e mande o arquivo para o outro (cabo, WhatsApp para você mesmo, e-mail…). No outro aparelho, toque em <b>Juntar com outro aparelho</b> e escolha o arquivo: ele <b>soma</b> o que falta, sem apagar nada.</p>
+        <div class="acts"><button class="btn primary" data-acao="exportar">Exportar backup</button><button class="btn" data-acao="juntar">Juntar com outro aparelho</button></div>
+        <p class="small" style="margin-top:10px">Apagou algo num aparelho? Apague também no outro — juntar não apaga nada.</p>
+      </div>
+      <div class="card"><h2>Backup completo</h2>
+        <p>Trocar <b>todos</b> os dados deste aparelho pelos de um arquivo de backup.</p>
+        <div class="acts"><button class="btn" data-acao="importar">Substituir por um backup</button></div>
+      </div>
+      <div class="card"><h2>Começar do zero</h2>
+        <p>Apaga todos os lançamentos, cartões e fixos deste navegador.</p>
+        <button class="btn danger" data-acao="apagarTudo">Apagar tudo</button>
+      </div>
+    </div>`;
+  [0, 1].forEach(i => $('#cfgNome' + i).onchange = e => { if (renomearPessoa(i, e.target.value)) { salvar(); toast('Nome atualizado em todos os lançamentos'); } else e.target.value = PESSOAS[i]; });
+  $('#cfgDivisao').onchange = e => { db.divisao = e.target.value; salvar(); toast('Divisão atualizada'); };
+  if ($('#cfgPct')) $('#cfgPct').onchange = e => { db.pctA = Math.min(100, Math.max(0, Number(e.target.value) || 0)); salvar(); toast(`${PESSOAS[0]} ${db.pctA}% · ${PESSOAS[1]} ${100 - db.pctA}%`); };
+}
+
+/* ============ Formulários ============ */
+const opcoesFormas = (comCartao = true) => [...Object.entries(FORMAS).map(([v, l]) => ({ v, l })), ...(comCartao ? db.cartoes.map(c => ({ v: c.id, l: `Cartão ${c.nome} (${c.titular})` })) : [])];
+const lista = arr => arr.map(x => ({ v: x, l: x }));
+function dataPadrao() { return mes === hojeYM() ? hojeISO() : mes + '-01'; }
+
+const FORMS = {
+  receitas: {
+    titulo: 'Entrada', fem: true,
+    campos: () => [
+      { n: 'valor', l: 'Valor (R$)', t: 'valor' },
+      { n: 'data', l: 'Data', t: 'date', d: dataPadrao() },
+      { n: 'pessoa', l: 'Quem recebeu', t: 'select', o: lista(PESSOAS) },
+      { n: 'tipo', l: 'Tipo', t: 'select', o: lista(TIPOS_ENTRADA) },
+      { n: 'descricao', l: 'Descrição / cliente', t: 'text', full: true, req: false, ph: 'ex.: Projeto site cliente X' },
+      { n: 'status', l: 'Situação', t: 'select', full: true, o: [{ v: 'recebido', l: 'Já recebido' }, { v: 'previsto', l: 'A receber (combinado, ainda não caiu)' }] },
+      { n: 'paraCasa', l: 'Quanto vai para a casa (R$)', t: 'valor', req: false, full: true, hint: 'Deixe vazio se vai tudo. Ex.: salário 3.500, para a casa 2.500 — o resto fica com a pessoa e não entra nas contas.' },
+    ],
+    salvar: v => { if (isNaN(v.paraCasa) || v.paraCasa >= v.valor) v.paraCasa = null; upsert('receitas', v); },
+  },
+  gastos: {
+    titulo: 'Gasto',
+    campos: () => [
+      { n: 'valor', l: 'Valor total (R$)', t: 'valor' },
+      { n: 'data', l: 'Data', t: 'date', d: dataPadrao() },
+      { n: 'descricao', l: 'Descrição', t: 'text', full: true, ph: 'ex.: Mercado, Uber, Farmácia' },
+      { n: 'categoria', l: 'Categoria', t: 'select', o: lista(CATEGORIAS), d: 'Outros' },
+      { n: 'pessoa', l: 'De quem', t: 'select', o: lista(RESP), d: 'Casal' },
+      { n: 'forma', l: 'Como pagou', t: 'select', o: opcoesFormas(), d: 'pix' },
+      { n: 'parcelas', l: 'Parcelas (total)', t: 'number', d: 1, min: 1, max: 48, se: v => ehCartao(v.forma) },
+      { n: 'faturaMes', l: 'Vai na fatura de', t: 'month', req: false, se: v => ehCartao(v.forma) && Number(v.parcelas) <= 1, full: true,
+        hint: 'Calculado pelo dia de fechamento do cartão. Se no banco ela caiu em outro mês, troque aqui.' },
+      { n: 'valorParcela', l: 'Valor da parcela (R$)', t: 'valor', req: false, se: v => ehCartao(v.forma) && Number(v.parcelas) > 1, hint: 'Digite a parcela e o total é calculado sozinho.' },
+      { n: 'parcelaAtual', l: `Parcela na fatura de ${nomeMes(mes).split(' ')[0]}`, t: 'number', min: 1, max: 48, req: false, se: v => ehCartao(v.forma) && Number(v.parcelas) > 1,
+        hint: 'Só para compra antiga já em andamento: se a fatura mostra 2/10, coloque 2. Compra nova? Deixe vazio.', full: true },
+    ],
+    salvar: v => {
+      v.parcelas = Math.max(1, parseInt(v.parcelas) || 1);
+      if (!v.id) v.id = uid();
+      const antiga = db.compras.find(x => x.id === v.id);
+      db.gastos = db.gastos.filter(x => x.id !== v.id);
+      db.compras = db.compras.filter(x => x.id !== v.id);
+      if (ehCartao(v.forma)) {
+        const { forma, parcelaAtual, valorParcela, faturaMes, ...rest } = v;
+        const n = parseInt(parcelaAtual);
+        const cart = cartaoPor(forma);
+        if (v.parcelas <= 1 && faturaMes && cart && faturaMes !== mesPrimeiraParcela({ data: v.data }, cart)) rest.primeiraParcela = faturaMes;
+        if (n >= 1 && v.parcelas > 1) rest.primeiraParcela = addM(mes, -(Math.min(n, v.parcelas) - 1));
+        else if (antiga?.primeiraParcela && v.parcelas > 1) { const k = difM(mes, antiga.primeiraParcela) + 1; if (k < 1 || k > v.parcelas) rest.primeiraParcela = antiga.primeiraParcela; } // editando fora do período: mantém
+        db.compras.push({ ...rest, cartaoId: forma });
+      }
+      else { const { parcelas, parcelaAtual, valorParcela, faturaMes, ...rest } = v; db.gastos.push(rest); }
+    },
+  },
+  fixos: {
+    titulo: 'Gasto fixo',
+    campos: () => [
+      { n: 'nome', l: 'Nome', t: 'text', full: true, ph: 'ex.: Aluguel, Internet, DAS MEI' },
+      { n: 'valor', l: 'Valor mensal (R$)', t: 'valor' },
+      { n: 'dia', l: 'Dia do vencimento', t: 'number', min: 1, max: 31, d: 10 },
+      { n: 'categoria', l: 'Categoria', t: 'select', o: lista(CATEGORIAS), d: 'Outros' },
+      { n: 'pessoa', l: 'De quem', t: 'select', o: lista(RESP), d: 'Casal' },
+      { n: 'forma', l: 'Como paga', t: 'select', o: opcoesFormas(), d: 'boleto', full: true, hint: 'Se for no cartão, entra na fatura dele todo mês.' },
+      { n: 'inicio', l: 'Desde (mês)', t: 'month', d: mes },
+      { n: 'fim', l: 'Até (opcional)', t: 'month', req: false, hint: 'Deixe vazio se não tem fim.' },
+      { n: 'parcelasTotal', l: 'Financiamento: total de parcelas', t: 'number', min: 1, max: 600, req: false, hint: 'Só para financiamento (ex.: 48).' },
+      { n: 'parcelaInicial', l: 'Parcela no mês "Desde"', t: 'number', min: 1, max: 600, req: false, hint: 'Ex.: 12 se em "Desde" paga a 12ª.' },
+    ],
+    salvar: v => {
+      v.dia = Math.min(31, Math.max(1, parseInt(v.dia) || 1)); v.fim = v.fim || null;
+      v.parcelasTotal = parseInt(v.parcelasTotal) || null; v.parcelaInicial = v.parcelasTotal ? Math.max(1, parseInt(v.parcelaInicial) || 1) : null;
+      upsert('fixos', v);
+    },
+  },
+  cartoes: {
+    titulo: 'Cartão',
+    campos: () => [
+      { n: 'nome', l: 'Nome do cartão', t: 'text', full: true, ph: 'ex.: Nubank, Inter, Itaú' },
+      { n: 'titular', l: 'Titular', t: 'select', o: lista(PESSOAS) },
+      { n: 'limite', l: 'Limite (R$)', t: 'valor', req: false },
+      { n: 'fechamento', l: 'Dia que fecha', t: 'number', min: 1, max: 31, d: 1 },
+      { n: 'vencimento', l: 'Dia que vence', t: 'number', min: 1, max: 31, d: 10 },
+    ],
+    salvar: v => {
+      v.fechamento = parseInt(v.fechamento) || 1; v.vencimento = parseInt(v.vencimento) || 10; v.limite = isNaN(v.limite) ? 0 : v.limite;
+      if (!v.id) v.id = 'card_' + uid();
+      upsert('cartoes', v);
+    },
+  },
+};
+FORMS.compras = { ...FORMS.gastos, titulo: 'Compra no cartão', fem: true };
+
+function upsert(col, v) {
+  if (!v.id) v.id = uid();
+  const i = db[col].findIndex(x => x.id === v.id);
+  if (i >= 0) db[col][i] = { ...db[col][i], ...v }; else db[col].push(v);
+}
+
+function campoHtml(c, val) {
+  const id = 'f_' + c.n, req = c.req === false ? '' : 'required';
+  let input;
+  if (c.t === 'select') input = `<select id="${id}" name="${c.n}">${c.o.map(o => `<option value="${esc(o.v)}" ${String(val) === String(o.v) ? 'selected' : ''}>${esc(o.l)}</option>`).join('')}</select>`;
+  else if (c.t === 'valor') input = `<input id="${id}" name="${c.n}" inputmode="decimal" placeholder="0,00" value="${esc(valorTxt(val))}" ${req} autocomplete="off">`;
+  else input = `<input id="${id}" name="${c.n}" type="${c.t}" value="${esc(val ?? '')}" ${c.min ? `min="${c.min}"` : ''} ${c.max ? `max="${c.max}"` : ''} ${c.ph ? `placeholder="${esc(c.ph)}"` : ''} ${req}>`;
+  return `<div class="field ${c.full ? 'full' : ''}" data-campo="${c.n}"><label for="${id}">${c.l}</label>${input}${c.hint ? `<span class="hint">${c.hint}</span>` : ''}</div>`;
+}
+
+let formAtual = null;
+/* ---------- Busca em todos os meses ---------- */
+const semAcento = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const mesCurto = ym => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }).replace('. de ', '/').replace('.', '').replace(' de ', '/'); };
+function buscarTudo(q) {
+  q = semAcento(q).trim();
+  const qNum = lerValor(q);
+  if (!q) return [];
+  const bate = (desc, valor) => semAcento(desc).includes(q) || (!isNaN(qNum) && /\d/.test(q) && Math.abs(Number(valor) - qNum) < 0.005);
+  const res = [];
+  for (const c of db.compras) if (bate(c.descricao, c.valor)) {
+    const cart = cartaoPor(c.cartaoId), p = Number(c.parcelas) || 1;
+    const ini = cart ? mesPrimeiraParcela(c, cart) : ymDe(c.data), fim = addM(ini, p - 1);
+    res.push({ x: c, col: 'compras', ir: ini, aba: 'cartoes', onde: `${nomeForma(c.cartaoId)} · ${p > 1 ? `${p}x de ${brl(valorParcela(c, 0))} · faturas de ${mesCurto(ini)} até ${mesCurto(fim)}` : `fatura de ${mesCurto(ini)}`}` });
+  }
+  for (const g of db.gastos) if (bate(g.descricao, g.valor)) res.push({ x: g, col: 'gastos', ir: ymDe(g.data), aba: 'gastos', onde: `${nomeForma(g.forma)} · Gastos do mês de ${mesCurto(ymDe(g.data))}` });
+  for (const r of db.receitas) if (bate(r.descricao || r.tipo, r.valor)) res.push({ x: { ...r, descricao: r.descricao || r.tipo }, col: 'receitas', ir: ymDe(r.data), aba: 'entradas', onde: `Entrada de ${r.pessoa} · ${mesCurto(ymDe(r.data))}` });
+  for (const f of db.fixos) if (bate(f.nome, f.valor)) res.push({ x: { ...f, descricao: f.nome, data: f.inicio + '-' + pad(f.dia || 1) }, col: 'fixos', ir: mes >= f.inicio ? mes : f.inicio, aba: 'fixos', onde: `Gasto fixo · desde ${mesCurto(f.inicio)}${f.fim ? ' até ' + mesCurto(f.fim) : ''}` });
+  return res.sort((a, b) => b.x.data.localeCompare(a.x.data));
+}
+function desenharBusca() {
+  const q = $('#buscaTxt').value, res = buscarTudo(q);
+  $('#buscaRes').innerHTML = !q.trim() ? '<div class="empty">Digite parte do nome (ex.: farm, padaria) ou um valor (ex.: 54,60).</div>'
+    : !res.length ? `<div class="empty">Nada encontrado com “${esc(q)}” em nenhum mês.</div>`
+    : `<div class="small muted" style="margin:0 0 8px">${res.length} resultado${res.length > 1 ? 's' : ''} · clique para abrir o mês certo</div><div class="list" style="box-shadow:none">` + res.map((r, k) => `
+      <div class="item" data-ir="${k}" style="cursor:pointer">
+        <div class="main"><div class="t">${esc(r.x.descricao)}</div><div class="s">${r.col === 'fixos' ? 'dia ' + r.x.dia : dataBR(r.x.data) + '/' + r.x.data.slice(2, 4)} · ${esc(r.onde)} ${tag(r.x.pessoa)}</div></div>
+        <div class="v">${brl(r.x.valor)}</div>
+      </div>`).join('') + '</div>';
+  $('#buscaRes').onclick = e => {
+    const it = e.target.closest('[data-ir]'); if (!it) return;
+    const r = res[it.dataset.ir]; mes = r.ir; aba = r.aba; $('#dlg').close(); render(); toast(`Abrindo ${nomeMes(mes)}`);
+  };
+}
+function abrirBusca() {
+  formAtual = { campos: [], F: { salvar: () => {} } };
+  $('#dlgTitulo').textContent = 'Buscar em todos os meses';
+  $('#dlgInfo').style.display = 'none';
+  $('#dlgSalvar').style.display = 'none';
+  $('#dlgCancel').textContent = 'Fechar';
+  $('#dlgCampos').innerHTML = `<div class="field full"><input id="buscaTxt" placeholder="Nome ou valor…" autocomplete="off"></div><div class="full" id="buscaRes"></div>`;
+  $('#buscaTxt').addEventListener('input', desenharBusca);
+  $('#buscaTxt').addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+  desenharBusca();
+  $('#dlg').showModal();
+  setTimeout(() => $('#buscaTxt').focus(), 30);
+}
+document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (!$('#dlg').open) abrirBusca(); } });
+
+function abrirDuplicados() {
+  const grupos = gruposDuplicados();
+  if (!grupos.length) return toast('Nenhum lançamento duplicado encontrado 👍');
+  formAtual = { campos: [], F: { salvar: () => {
+    const remover = new Set([...document.querySelectorAll('[data-dup]:checked')].map(x => x.dataset.dup));
+    db.compras = db.compras.filter(c => !remover.has(c.id));
+    db.gastos = db.gastos.filter(g => !remover.has(g.id));
+    setTimeout(() => toast(`${remover.size} lançamento${remover.size === 1 ? '' : 's'} removido${remover.size === 1 ? '' : 's'}`), 50);
+  } } };
+  $('#dlgTitulo').textContent = 'Lançamentos duplicados';
+  $('#dlgInfo').style.display = 'none';
+  $('#dlgSalvar').textContent = 'Remover marcados'; $('#dlgSalvar').style.display = ''; $('#dlgCancel').textContent = 'Cancelar';
+  $('#dlgCampos').innerHTML = `<p class="full small muted" style="margin:0 0 12px">Mesma data, mesmo valor e mesma forma de pagamento. Já deixei marcadas as cópias (fica o primeiro de cada grupo). Desmarque se foram compras diferentes de verdade.</p>` +
+    grupos.map(gr => `<div class="full list" style="margin-bottom:12px;box-shadow:none">${gr.map((x, k) => `
+      <label class="item" style="cursor:pointer">
+        <input type="checkbox" class="chk" data-dup="${x.id}" ${k > 0 ? 'checked' : ''}>
+        <div class="main"><div class="t">${esc(x.descricao)}</div><div class="s">${dataBR(x.data)} · ${esc(nomeForma(x.cartaoId || x.forma))}${x.parcelas > 1 ? ` · ${x.parcelas}x` : ''} ${tag(x.pessoa)}</div></div>
+        <div class="v">${brl(x.valor)}</div>
+      </label>`).join('')}</div>`).join('');
+  $('#dlg').showModal();
+}
+function abrirForm(col, item) {
+  $('#dlgSalvar').textContent = 'Salvar'; $('#dlgSalvar').style.display = ''; $('#dlgCancel').textContent = 'Cancelar';
+  const F = FORMS[col], campos = F.campos();
+  const vals = {};
+  if (item) Object.assign(vals, item, col === 'compras' ? { forma: item.cartaoId } : {});
+  if (item?.cartaoId && !(item.parcelas > 1) && item.primeiraParcela) vals.faturaMes = item.primeiraParcela;
+  if (item?.cartaoId && item.parcelas > 1) vals.valorParcela = valorParcela(item, 0);
+  if (item?.primeiraParcela) { const n = difM(mes, item.primeiraParcela) + 1; if (n >= 1 && n <= item.parcelas) vals.parcelaAtual = n; }
+  for (const c of campos) if (vals[c.n] === undefined && c.d !== undefined) vals[c.n] = c.d;
+  if (col === 'gastos' && !item && campos.find(c => c.n === 'forma') && aba === 'cartoes' && db.cartoes[0]) vals.forma = db.cartoes[0].id;
+  formAtual = { col, campos, id: item?.id, F };
+  $('#dlgTitulo').textContent = (item ? 'Editar ' : F.fem ? 'Nova ' : 'Novo ') + F.titulo.toLowerCase();
+  $('#dlgCampos').innerHTML = campos.map(c => campoHtml(c, vals[c.n])).join('');
+  atualizarVisibilidade();
+  editouParcela = false; editouFatura = !!vals.faturaMes; sincronizarParcelas();
+  $('#dlg').showModal();
+  setTimeout(() => $('#dlgCampos input, #dlgCampos select')?.focus(), 30);
+}
+function lerForm() {
+  const v = {};
+  for (const c of formAtual.campos) {
+    const el = $('#f_' + c.n); if (!el) continue;
+    v[c.n] = c.t === 'valor' ? lerValor(el.value) : el.value.trim();
+  }
+  return v;
+}
+function atualizarVisibilidade() {
+  const v = lerForm();
+  for (const c of formAtual.campos) if (c.se) {
+    const el = document.querySelector(`[data-campo="${c.n}"]`), on = c.se(v);
+    el.style.display = on ? '' : 'none';
+    el.querySelector('input,select').disabled = !on;
+  }
+}
+$('#dlgCampos').addEventListener('change', atualizarVisibilidade);
+$('#dlgCampos').addEventListener('input', atualizarVisibilidade);
+// Compra parcelada: valor da parcela <-> valor total, e quanto falta pagar
+let editouParcela = false;
+let editouFatura = false;
+function sincronizarFatura(e) {
+  const ff = $('#f_faturaMes'); if (!ff) return;
+  if (e?.target === ff) { editouFatura = !!ff.value; return; }
+  if (editouFatura && ff.value) return;
+  const cart = cartaoPor($('#f_forma')?.value), data = $('#f_data')?.value;
+  if (cart && data) ff.value = mesPrimeiraParcela({ data }, cart);
+}
+function sincronizarParcelas(e) {
+  sincronizarFatura(e);
+  const fp = $('#f_valorParcela'), ft = $('#f_valor'), fn = $('#f_parcelas'), info = $('#dlgInfo');
+  if (!fp || !ft || !fn) { info.style.display = 'none'; return; }
+  const n = Math.max(1, parseInt(fn.value) || 1);
+  if (e?.target === fp) editouParcela = true;
+  if (e?.target === ft) editouParcela = false;
+  if (fp.disabled) { info.style.display = 'none'; return; }
+  if (editouParcela) { const vp = lerValor(fp.value); if (!isNaN(vp) && vp > 0) ft.value = valorTxt(r2(vp * n)); }
+  else if (e?.target !== fp) { const vt = lerValor(ft.value); if (!isNaN(vt) && vt > 0) fp.value = valorTxt(Math.floor(Math.round(vt * 100) / n) / 100); }
+  const total = lerValor(ft.value);
+  if (isNaN(total) || total <= 0) { info.style.display = 'none'; return; }
+  const parc = i => valorParcela({ valor: total, parcelas: n }, i);
+  const atual = Math.min(n, parseInt($('#f_parcelaAtual')?.value) || 1);
+  let falta = 0; for (let i = atual; i < n; i++) falta += parc(i);
+  const nome = nomeMes(mes).split(' ')[0];
+  info.innerHTML = `Total <b>${brl(total)}</b> em ${n}x de <b>${brl(parc(0))}</b>.<br>` +
+    (atual >= n ? `Em ${nome} é a <b>última parcela</b> (${n}/${n}).`
+      : `Em ${nome}: parcela ${atual}/${n}. Depois dela ainda <b>faltam ${n - atual} parcela${n - atual > 1 ? 's' : ''} = ${brl(r2(falta))}</b>.`);
+  info.style.display = '';
+}
+$('#dlgCampos').addEventListener('input', sincronizarParcelas);
+$('#dlgCampos').addEventListener('change', sincronizarParcelas);
+$('#dlgCancel').onclick = () => $('#dlg').close();
+$('#dlgForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = lerForm();
+  for (const c of formAtual.campos) if (c.t === 'valor' && c.req !== false && (isNaN(v[c.n]) || v[c.n] <= 0)) {
+    toast('Coloque um valor válido, ex.: 150,90'); $('#f_' + c.n).focus(); return;
+  }
+  if (formAtual.id) v.id = formAtual.id;
+  formAtual.F.salvar(v);
+  $('#dlg').close();
+  salvar();
+  toast('Salvo');
+});
+
+/* ============ Ações ============ */
+const ACOES = {
+  novaEntrada: () => abrirForm('receitas'),
+  novoGasto: () => abrirForm('gastos'),
+  novoFixo: () => abrirForm('fixos'),
+  novoCartao: () => abrirForm('cartoes'),
+  duplicados: () => abrirDuplicados(),
+  buscar: () => abrirBusca(),
+  salvarReserva: () => { const v = lerValor($('#cfgReserva').value); if (isNaN(v)) return toast('Valor inválido'); db.reserva = v; salvar(); toast('Reserva atualizada'); },
+  exportar: async () => {
+    const nome = `financas-backup-${hojeISO()}.json`;
+    const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+    try {
+      const f = new File([blob], nome, { type: 'application/json' });
+      if (celular && navigator.canShare?.({ files: [f] })) { await navigator.share({ files: [f], title: 'Backup Finanças' }); return; }
+    } catch (e) { if (e.name === 'AbortError') return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `financas-backup-${hojeISO()}.json`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  },
+  importar: () => $('#importFile').click(),
+  importarCompras: () => $('#importCompras').click(),
+  juntar: () => $('#juntarFile').click(),
+  arquivo: () => acaoArquivo(),
+  novoArquivo: () => escolherArquivo(false),
+  abrirArquivo: () => escolherArquivo(true),
+  apagarTudo: () => { if (confirm('Apagar TODOS os dados deste navegador? Isso não pode ser desfeito.')) { db = VAZIO(); salvar(); toast('Tudo apagado'); } },
+};
+// Soma compras de um arquivo { cartoes:[{nome,fechamento,vencimento}], compras:[{cartao,data,descricao,valor|valorParcela,parcelas,parcelaNaFatura,fatura,categoria,pessoa}] }
+const lerJSON = t => JSON.parse(String(t).replace(/^\uFEFF/, ''));
+const ehArquivoDeFaturas = d => d && Array.isArray(d.compras) && !Array.isArray(d.receitas) && d.compras.some(c => c.cartao);
+$('#importCompras').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  let d; try { d = lerJSON(await f.text()); if (!Array.isArray(d.compras)) throw 0; } catch { return toast('Arquivo inválido'); }
+  if (Array.isArray(d.receitas)) return alert('Esse é um arquivo completo de dados (backup), não um arquivo de faturas. Para abrir ele, use "Abrir arquivo existente" ou "Importar backup".');
+  importarFaturas(d);
+};
+function importarFaturas(d) {
+  const acharCartao = nome => db.cartoes.find(c => semAcento(c.nome).trim() === semAcento(nome).trim());
+  const faltando = [...new Set(d.compras.map(c => c.cartao).filter(n => !acharCartao(n)))];
+  if (faltando.length) return alert(`Cadastre primeiro o cartão: ${faltando.join(', ')} (aba Cartões) e tente de novo.`);
+  const ajustes = (d.cartoes || []).map(c => { const a = acharCartao(c.nome); return { c: a, n: a && { fechamento: c.fechamento ?? a.fechamento, vencimento: c.vencimento ?? a.vencimento } }; })
+    .filter(x => x.c && (Number(x.c.fechamento) !== Number(x.n.fechamento) || Number(x.c.vencimento) !== Number(x.n.vencimento)));
+  const novas = [], repetidas = [];
+  const existentes = new Set(db.compras.map(chaveCompra));
+  for (const x of d.compras) {
+    const cart = acharCartao(x.cartao), n = Math.max(1, parseInt(x.parcelas) || 1);
+    const valor = x.valorParcela ? r2(x.valorParcela * n) : r2(x.valor);
+    const c = { id: uid(), cartaoId: cart.id, data: x.data, descricao: x.descricao, valor, parcelas: n, categoria: x.categoria || 'Outros', pessoa: x.pessoa || cart.titular };
+    if (x.fatura) c.primeiraParcela = addM(x.fatura, -((parseInt(x.parcelaNaFatura) || 1) - 1));
+    (existentes.has(chaveCompra(c)) ? repetidas : novas).push(c);
+  }
+  const msg = `${novas.length} compra(s) nova(s) para adicionar.` + (repetidas.length ? `\n${repetidas.length} já estavam lançadas e serão puladas.` : '') +
+    (ajustes.length ? `\n\nTambém vou corrigir: ${ajustes.map(a => `${a.c.nome} → fecha dia ${a.n.fechamento}, vence dia ${a.n.vencimento}`).join('; ')}.` : '') + '\n\nAdicionar?';
+  if (!confirm(msg)) return;
+  for (const a of ajustes) { a.c.fechamento = Number(a.n.fechamento); a.c.vencimento = Number(a.n.vencimento); }
+  db.compras.push(...novas);
+  salvar(); aba = 'cartoes'; render(); toast(`${novas.length} compra(s) adicionada(s)`);
+}
+$('#importFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const d = lerJSON(await f.text());
+    if (ehArquivoDeFaturas(d)) { e.target.value = ''; return importarFaturas(d); }
+    if (!d || !Array.isArray(d.receitas)) throw 0;
+    if (!confirm('Substituir os dados atuais pelos do backup?')) return;
+    db = Object.assign(VAZIO(), d); salvar(); toast('Backup importado');
+  } catch { toast('Arquivo de backup inválido'); }
+  e.target.value = '';
+};
+
+/* ---------- Juntar dados de outro aparelho (soma, não apaga) ---------- */
+function juntarDados(outro) {
+  const novos = {};
+  for (const col of ['receitas', 'fixos', 'cartoes', 'compras', 'gastos']) {
+    const ids = new Set(db[col].map(x => x.id));
+    const chaves = col === 'compras' ? new Set(db.compras.map(chaveCompra)) : null;
+    const add = (outro[col] || []).filter(x => x && !ids.has(x.id) && !(chaves && chaves.has(chaveCompra(x))));
+    db[col].push(...add); novos[col] = add.length;
+  }
+  for (const k of ['pagos', 'ajustes']) for (const [m, obj] of Object.entries(outro[k] || {})) db[k][m] = { ...obj, ...(db[k][m] || {}) };
+  if (!db.reserva && outro.reserva) db.reserva = outro.reserva;
+  return novos;
+}
+$('#juntarFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  let d; try { d = lerJSON(await f.text()); } catch { return toast('Arquivo inválido'); }
+  if (ehArquivoDeFaturas(d)) return importarFaturas(d);
+  if (!Array.isArray(d.receitas)) return toast('Esse arquivo não é um backup das finanças');
+  const n = juntarDados(d);
+  const total = Object.values(n).reduce((a, b) => a + b, 0);
+  salvar();
+  alert(total ? `Juntei ${total} lançamento(s) novo(s):\n• ${n.compras} compras no cartão\n• ${n.gastos} gastos\n• ${n.receitas} entradas\n• ${n.fixos} gastos fixos\n• ${n.cartoes} cartões` : 'Nada novo: este aparelho já tinha tudo desse arquivo.');
+};
+
+// Arrastar um arquivo .json para a página
+document.addEventListener('dragover', e => { e.preventDefault(); });
+document.addEventListener('drop', async e => {
+  e.preventDefault();
+  const f = e.dataTransfer?.files?.[0]; if (!f) return;
+  let d; try { d = lerJSON(await f.text()); } catch { return toast('Esse arquivo não é um .json válido'); }
+  if (ehArquivoDeFaturas(d)) return importarFaturas(d);
+  if (Array.isArray(d.receitas)) { if (confirm('Esse é um backup completo. Juntar os lançamentos dele com os deste aparelho (sem apagar nada)?')) { const n = juntarDados(d); salvar(); toast(`${Object.values(n).reduce((a, b) => a + b, 0)} lançamento(s) novo(s)`); } return; }
+  toast('Não reconheci esse arquivo');
+});
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-tab],[data-acao],[data-editar],[data-excluir],[data-encerrar],[data-ajustar]');
+  if (!t) return;
+  if (t.dataset.tab) { aba = t.dataset.tab; render(); window.scrollTo({ top: 0 }); return; }
+  if (t.dataset.acao) return ACOES[t.dataset.acao]();
+  if (t.dataset.editar) { const [col, id] = t.dataset.editar.split(':'); return abrirForm(col, db[col].find(x => x.id === id)); }
+  if (t.dataset.ajustar) {
+    const f = db.fixos.find(x => x.id === t.dataset.ajustar), atual = db.ajustes?.[mes]?.[f.id];
+    const r = prompt(`Valor de "${f.nome}" só em ${nomeMes(mes)} (padrão ${brl(f.valor)}).\nDeixe vazio para voltar ao padrão.`, atual != null ? valorTxt(atual) : '');
+    if (r === null) return;
+    db.ajustes ||= {};
+    if (r.trim() === '') { if (db.ajustes[mes]) delete db.ajustes[mes][f.id]; }
+    else { const v = lerValor(r); if (isNaN(v) || v < 0) return toast('Valor inválido'); (db.ajustes[mes] ||= {})[f.id] = v; }
+    salvar(); return;
+  }
+  if (t.dataset.encerrar) {
+    const f = db.fixos.find(x => x.id === t.dataset.encerrar);
+    if (confirm(`Encerrar "${f.nome}"? Ele deixa de aparecer a partir de ${nomeMes(mes)}, mas continua no histórico dos meses anteriores.`)) { f.fim = addM(mes, -1); salvar(); }
+    return;
+  }
+  if (t.dataset.excluir) {
+    const [col, id] = t.dataset.excluir.split(':');
+    if (col === 'cartoes') {
+      const n = db.compras.filter(c => c.cartaoId === id).length;
+      if (!confirm(`Excluir este cartão${n ? ` e as ${n} compras lançadas nele` : ''}?`)) return;
+      db.compras = db.compras.filter(c => c.cartaoId !== id);
+      db.fixos.forEach(f => { if (f.forma === id) f.forma = 'boleto'; });
+    } else if (col === 'fixos') {
+      if (!confirm('Excluir este gasto fixo de TODOS os meses? (Para só parar daqui pra frente, use ⏹ Encerrar.)')) return;
+    } else if (!confirm('Excluir este lançamento?')) return;
+    db[col] = db[col].filter(x => x.id !== id);
+    salvar();
+  }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.pagar) { (db.pagos[mes] ||= {})[t.dataset.pagar] = t.checked; if (!t.checked) delete db.pagos[mes][t.dataset.pagar]; salvar(); }
+  if (t.dataset.receber) { const r = db.receitas.find(x => x.id === t.dataset.receber); r.status = t.checked ? 'recebido' : 'previsto'; salvar(); }
+});
+$('#prev').onclick = () => { mes = addM(mes, -1); render(); };
+$('#next').onclick = () => { mes = addM(mes, 1); render(); };
+
+prepararPessoas();
+render();
+iniciarArquivo();
+// App instalável (funciona sem internet) e pedido para o celular não apagar os dados
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+try { navigator.storage?.persist?.(); } catch (e) {}
+</script>
+</body>
+</html>
