@@ -1162,6 +1162,22 @@ document.addEventListener('change', e => {
 $('#prev').onclick = () => { mes = addM(mes, -1); render(); };
 $('#next').onclick = () => { mes = addM(mes, 1); render(); };
 
+// Dados que vêm junto com a página (só na versão privada do celular). Aplicados uma única vez.
+function aplicarSemente() {
+  const sem = window.DADOS_INICIAIS;
+  if (!sem || db.semente === sem.semente) return;
+  const vazio = !db.receitas.length && !db.compras.length && !db.fixos.length && !db.gastos.length;
+  if (vazio) db = Object.assign(VAZIO(), JSON.parse(JSON.stringify(sem)));
+  else { // já tem lançamentos: atualiza os que vieram na página e soma os que faltam
+    for (const col of ['receitas', 'fixos', 'cartoes', 'compras', 'gastos'])
+      for (const x of sem[col] || []) { const i = db[col].findIndex(y => y.id === x.id); if (i >= 0) db[col][i] = JSON.parse(JSON.stringify(x)); }
+    if (Array.isArray(sem.pessoas)) db.pessoas = [...sem.pessoas];
+    juntarDados(sem);
+  }
+  db.semente = sem.semente;
+  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) {}
+}
+aplicarSemente();
 prepararPessoas();
 render();
 iniciarArquivo();
