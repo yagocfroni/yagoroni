@@ -136,6 +136,9 @@ dialog h3{margin:0 0 14px;font-size:18px}
 .dlg-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
 .dlg2-texto{white-space:pre-line;font-size:15px;margin:0 0 12px}
 #dlg2 textarea{width:100%;min-height:140px;font:13px/1.4 ui-monospace,monospace;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text)}
+.seg{display:inline-flex;background:var(--surface-2);border-radius:12px;padding:3px;gap:3px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;color:var(--muted);padding:7px 12px;border-radius:9px;font-size:13.5px}
+.seg button.on{background:var(--surface);color:var(--text);font-weight:600;box-shadow:var(--shadow)}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s}
 #toast.on{opacity:1}
 .cfg p{margin:0 0 10px;font-size:14px;color:var(--muted)}
@@ -220,7 +223,7 @@ function carregar() {
   try {
     let s = localStorage.getItem(KEY);
     if (!s) { // dados de uma versão antiga, guardados com outro nome
-      const antiga = Object.keys(localStorage).find(k => k !== KEY && k.startsWith('financas-'));
+      const antiga = Object.keys(localStorage).find(k => { if (k === KEY || !k.startsWith('financas-')) return false; try { return Array.isArray(JSON.parse(localStorage.getItem(k)).receitas); } catch (e) { return false; } });
       if (antiga) { s = localStorage.getItem(antiga); localStorage.setItem(KEY, s); localStorage.removeItem(antiga); }
     }
     if (s) return Object.assign(VAZIO(), JSON.parse(s));
@@ -399,12 +402,26 @@ function fixosAtivos(ym) {
 const fimParcelas = f => f.parcelasTotal ? addM(f.inicio, f.parcelasTotal - (Number(f.parcelaInicial) || 1)) : null;
 
 // Mês em que vence a 1ª parcela de uma compra no cartão
+// "Virada" = dia em que a fatura fecha e começa a próxima (o "melhor dia de compra" do banco).
+// O banco muda esse dia de um mês para outro, então dá para ajustar mês a mês (cartao.viradas).
+const virada = (c, ym) => Number(c.viradas?.[ym] ?? c.fechamento);
+const vencNoMesSeguinte = c => Number(c.vencimento) <= Number(c.fechamento);
+const mesFechaDaFatura = (c, ymFatura) => vencNoMesSeguinte(c) ? addM(ymFatura, -1) : ymFatura;
 function mesPrimeiraParcela(compra, cartao) {
-  if (compra.primeiraParcela) return compra.primeiraParcela; // compra antiga lançada como "parcela X"
+  if (compra.primeiraParcela) return compra.primeiraParcela; // fatura escolhida à mão
   const [y, m, d] = compra.data.split('-').map(Number);
   let fecha = `${y}-${pad(m)}`;
-  if (d >= Number(cartao.fechamento)) fecha = addM(fecha, 1); // comprou no dia do fechamento ou depois -> próxima fatura
-  return Number(cartao.vencimento) > Number(cartao.fechamento) ? fecha : addM(fecha, 1);
+  if (d >= virada(cartao, fecha)) fecha = addM(fecha, 1); // comprou no dia da virada ou depois -> próxima fatura
+  return vencNoMesSeguinte(cartao) ? addM(fecha, 1) : fecha;
+}
+// Período de compras de uma fatura (mês de vencimento) e a data de vencimento
+function periodoFatura(c, ymFatura) {
+  const fm = mesFechaDaFatura(c, ymFatura), ant = addM(fm, -1);
+  const dia = (ym, d) => { const [y, m] = ym.split('-').map(Number); return Math.min(d, new Date(y, m, 0).getDate()); };
+  const ini = new Date(+ant.slice(0, 4), +ant.slice(5) - 1, dia(ant, virada(c, ant)));
+  const fim = new Date(+fm.slice(0, 4), +fm.slice(5) - 1, dia(fm, virada(c, fm)) - 1);
+  const f = d => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+  return { de: f(ini), ate: f(fim), vence: `${pad(dia(ymFatura, Number(c.vencimento)))}/${ymFatura.slice(5)}`, mesFecha: fm, ajustado: c.viradas?.[fm] != null };
 }
 function valorParcela(compra, i) {
   const p = Number(compra.parcelas) || 1;
@@ -580,11 +597,17 @@ function rEntradas() {
       </div>`).join('') : '<div class="empty">Nenhuma entrada neste mês.</div>'}</div>`;
 }
 
+let visaoGastos = (() => { try { return localStorage.getItem('visao-gastos') || 'compra'; } catch (e) { return 'compra'; } })();
 function rGastos() {
-  const lista = [
+  const etiquetaFatura = c => { const cart = cartaoPor(c.cartaoId); return cart ? ` <span class="tag">fatura de ${nomeMes(mesPrimeiraParcela(c, cart), true)}</span>` : ''; };
+  const lista = visaoGastos === 'fatura' ? [
     ...db.gastos.filter(g => ymDe(g.data) === mes).map(g => ({ ...g, col: 'gastos', info: nomeForma(g.forma) })),
-    ...db.compras.filter(c => ymDe(c.data) === mes).map(c => ({ ...c, col: 'compras', info: nomeForma(c.cartaoId) + (c.parcelas > 1 ? ` · ${c.parcelas}x de ${brl(valorParcela(c, 0))}` : '') })),
-  ].sort((a, b) => b.data.localeCompare(a.data));
+    ...db.cartoes.flatMap(cart => itensFatura(cart.id, mes).filter(i => i.tipo === 'compra').map(i => ({ ...i.ref, valor: i.valor, col: 'compras', info: `Cartão ${cart.nome}${i.parcela ? ' · ' + i.parcela : ''}`, extra: '' }))),
+  ] : [
+    ...db.gastos.filter(g => ymDe(g.data) === mes).map(g => ({ ...g, col: 'gastos', info: nomeForma(g.forma) })),
+    ...db.compras.filter(c => ymDe(c.data) === mes).map(c => ({ ...c, col: 'compras', info: nomeForma(c.cartaoId) + (c.parcelas > 1 ? ` · ${c.parcelas}x de ${brl(valorParcela(c, 0))}` : ''), extra: etiquetaFatura(c) })),
+  ];
+  lista.sort((a, b) => b.data.localeCompare(a.data));
   const tot = p => soma(lista.filter(g => g.pessoa === p));
   const dups = idsDuplicados();
   $('#gastos').innerHTML = `
@@ -592,11 +615,17 @@ function rGastos() {
       ${RESP.map(p => `<div class="card kpi"><div class="lbl">${p}</div><div class="val">${brl(tot(p))}</div></div>`).join('')}
       <div class="card kpi"><div class="lbl">Total</div><div class="val">${brl(soma(lista))}</div></div>
     </div>
-    <div class="row-head"><h2>Gastos feitos em ${nomeMes(mes)}</h2><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn" data-acao="duplicados">Procurar duplicados${dups.size ? ` (${gruposDuplicados().length})` : ''}</button><button class="btn primary" data-acao="novoGasto">+ Gasto</button></div></div>
-    <p class="small muted" style="margin:-4px 0 10px">Mercado, uber, farmácia, compras… Se pagou no cartão, escolha o cartão e as parcelas — ele vai sozinho para as faturas certas.</p>
+    <div class="row-head"><h2>${visaoGastos === 'fatura' ? 'Pago em' : 'Comprado em'} ${nomeMes(mes)}</h2><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn" data-acao="duplicados">Procurar duplicados${dups.size ? ` (${gruposDuplicados().length})` : ''}</button><button class="btn primary" data-acao="novoGasto">+ Gasto</button></div></div>
+    <div class="seg" role="group" aria-label="Como ver os gastos">
+      <button class="${visaoGastos === 'compra' ? 'on' : ''}" data-visao="compra">Por data da compra</button>
+      <button class="${visaoGastos === 'fatura' ? 'on' : ''}" data-visao="fatura">Por fatura (quando paga)</button>
+    </div>
+    <p class="small muted" style="margin:8px 0 10px">${visaoGastos === 'fatura'
+      ? `O que vocês pagam em ${nomeMes(mes).split(' ')[0]}: Pix/débito do mês + as compras e parcelas que estão nas faturas que vencem em ${nomeMes(mes).split(' ')[0]} (mesmo que compradas no mês anterior).`
+      : 'Tudo o que foi comprado neste mês. Compras no cartão mostram em qual fatura caíram — ex.: algo comprado no começo do mês pode estar na fatura que vence agora.'}</p>
     <div class="list">${lista.length ? lista.map(g => `
       <div class="item">
-        <div class="main"><div class="t">${esc(g.descricao)}</div><div class="s">${dataBR(g.data)} · ${esc(g.categoria)} · ${esc(g.info)} ${tag(g.pessoa)} ${dups.has(g.id) ? tagDup : ''}</div></div>
+        <div class="main"><div class="t">${esc(g.descricao)}</div><div class="s">${dataBR(g.data)} · ${esc(g.categoria)} · ${esc(g.info)}${g.extra || ''} ${tag(g.pessoa)} ${dups.has(g.id) ? tagDup : ''}</div></div>
         <div class="v">${brl(g.valor)}</div>
         <div class="acts"><button class="icon" data-editar="${g.col}:${g.id}" aria-label="Editar">✎</button><button class="icon" data-excluir="${g.col}:${g.id}" aria-label="Excluir">✕</button></div>
       </div>`).join('') : '<div class="empty">Nenhum gasto lançado neste mês.</div>'}</div>`;
@@ -644,10 +673,10 @@ function rCartoes() {
     const pago = !!(db.pagos[mes] || {})['c:' + c.id];
     return `<div class="card cc">
       <div class="cc-head">
-        <div><h3>${esc(c.nome)} ${tag(c.titular)}</h3><div class="small muted">fecha dia ${c.fechamento} · vence dia ${c.vencimento}</div></div>
+        <div><h3>${esc(c.nome)} ${tag(c.titular)}</h3><div class="small muted">vira dia ${c.fechamento} · vence dia ${c.vencimento}</div></div>
         <div class="acts"><button class="icon" data-editar="cartoes:${c.id}" aria-label="Editar cartão">✎</button><button class="icon" data-excluir="cartoes:${c.id}" aria-label="Excluir cartão">✕</button></div>
       </div>
-      <div style="margin:12px 0 4px" class="small muted">Fatura que vence em ${nomeMes(mes)}</div>
+      ${(() => { const per = periodoFatura(c, mes); return `<div style="margin:12px 0 4px" class="small muted">Fatura de <b>${nomeMes(mes).split(' ')[0]}</b> · compras de <b>${per.de}</b> a <b>${per.ate}</b> · vence ${per.vence}${per.ajustado ? ' · <span class="tag prev">período ajustado</span>' : ''} <button class="btn small" style="padding:3px 9px;margin-left:4px" data-virada="${c.id}">Ajustar período</button></div>`; })()}
       <div class="cc-total">${brl(total)} ${total > 0 ? `<label class="small muted" style="font-weight:400;margin-left:8px"><input type="checkbox" class="chk" style="vertical-align:middle;width:18px;height:18px" data-pagar="c:${c.id}" ${pago ? 'checked' : ''}> paga</label>` : ''}</div>
       ${c.limite > 0 ? `<div style="margin-top:12px"><div class="linha small"><span>Limite usado</span><span>${brl(usado)} de ${brl(c.limite)}</span></div><div class="bar ${pct > 85 ? 'bad' : pct > 60 ? 'warn' : ''}"><i style="width:${pct}%"></i></div></div>` : ''}
       <div class="list" style="margin-top:14px;box-shadow:none">${itens.length ? itens.map(i => `
@@ -796,7 +825,7 @@ const FORMS = {
       { n: 'nome', l: 'Nome do cartão', t: 'text', full: true, ph: 'ex.: Nubank, Inter, Itaú' },
       { n: 'titular', l: 'Titular', t: 'select', o: lista(PESSOAS) },
       { n: 'limite', l: 'Limite (R$)', t: 'valor', req: false },
-      { n: 'fechamento', l: 'Dia que fecha', t: 'number', min: 1, max: 31, d: 1 },
+      { n: 'fechamento', l: 'Melhor dia de compra', t: 'number', min: 1, max: 31, d: 1, hint: 'Dia em que a fatura vira (aparece no app do banco). Se mudar num mês, use "Ajustar período".' },
       { n: 'vencimento', l: 'Dia que vence', t: 'number', min: 1, max: 31, d: 10 },
     ],
     salvar: v => {
@@ -1121,11 +1150,22 @@ document.addEventListener('drop', async e => {
 });
 
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-tab],[data-acao],[data-editar],[data-excluir],[data-encerrar],[data-ajustar]');
+  const t = e.target.closest('[data-tab],[data-acao],[data-editar],[data-excluir],[data-encerrar],[data-ajustar],[data-virada],[data-visao]');
   if (!t) return;
   if (t.dataset.tab) { aba = t.dataset.tab; render(); window.scrollTo({ top: 0 }); return; }
   if (t.dataset.acao) return ACOES[t.dataset.acao]();
   if (t.dataset.editar) { const [col, id] = t.dataset.editar.split(':'); return abrirForm(col, db[col].find(x => x.id === id)); }
+  if (t.dataset.visao) { visaoGastos = t.dataset.visao; try { localStorage.setItem('visao-gastos', visaoGastos); } catch (e) {} render(); return; }
+  if (t.dataset.virada) {
+    const c = cartaoPor(t.dataset.virada), fm = mesFechaDaFatura(c, mes), per = periodoFatura(c, mes);
+    const r = await perguntar(`Fatura de ${nomeMes(mes)} do ${c.nome}: hoje vai de ${per.de} a ${per.ate}.\n\nQual é o "melhor dia de compra" (o dia em que ela vira) em ${nomeMes(fm)}? Veja no app do banco. Deixe vazio para voltar ao padrão (dia ${c.fechamento}).`, c.viradas?.[fm] ?? '', 'Período da fatura');
+    if (r === null) return;
+    const d = parseInt(r);
+    c.viradas ||= {};
+    if (!r.trim() || d === Number(c.fechamento)) delete c.viradas[fm];
+    else if (d >= 1 && d <= 31) c.viradas[fm] = d; else return toast('Dia inválido');
+    salvar(); const n = periodoFatura(c, mes); toast(`Fatura de ${nomeMes(mes).split(' ')[0]}: ${n.de} a ${n.ate}`); return;
+  }
   if (t.dataset.ajustar) {
     const f = db.fixos.find(x => x.id === t.dataset.ajustar), atual = db.ajustes?.[mes]?.[f.id];
     const r = await perguntar(`Valor de "${f.nome}" só em ${nomeMes(mes)} (padrão ${brl(f.valor)}).\nDeixe vazio para voltar ao padrão.`, atual != null ? valorTxt(atual) : '', 'Valor deste mês');
@@ -1169,7 +1209,8 @@ function aplicarSemente() {
   const vazio = !db.receitas.length && !db.compras.length && !db.fixos.length && !db.gastos.length;
   if (vazio) db = Object.assign(VAZIO(), JSON.parse(JSON.stringify(sem)));
   else { // já tem lançamentos: atualiza os que vieram na página e soma os que faltam
-    for (const col of ['receitas', 'fixos', 'cartoes', 'compras', 'gastos'])
+    // se uma versão anterior já foi aplicada, só os cartões são atualizados (para não desfazer edições feitas no aparelho)
+    for (const col of db.semente ? ['cartoes'] : ['receitas', 'fixos', 'cartoes', 'compras', 'gastos'])
       for (const x of sem[col] || []) { const i = db[col].findIndex(y => y.id === x.id); if (i >= 0) db[col][i] = JSON.parse(JSON.stringify(x)); }
     if (Array.isArray(sem.pessoas)) db.pessoas = [...sem.pessoas];
     juntarDados(sem);
