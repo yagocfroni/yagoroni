@@ -1,6 +1,6 @@
 // Faz o app abrir sem internet. Não guarda nenhum dado financeiro:
 // os lançamentos ficam só na memória do aparelho (localStorage).
-const CACHE = 'financas-v2';
+const CACHE = 'financas-v3';
 const ARQUIVOS = ['./financas.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './icon-512-maskable.png'];
 
 self.addEventListener('install', e => {
