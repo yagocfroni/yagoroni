@@ -568,7 +568,9 @@ const fixaAtiva = (f, ym) => f.inicio <= ym && (!f.fim || ym <= f.fim);
 function entradasPrevistas(ym) {
   const doMes = db.receitas.filter(r => ymDe(r.data) === ym || r.mesRef === ym);
   // já lançada no mês (pelo vínculo, ou à mão com a mesma pessoa e o mesmo valor): não repete
-  const jaTem = f => doMes.some(r => r.fixaId === f.id || (!r.fixaId && r.pessoa === f.pessoa && Math.abs(r.valor - f.valor) < 0.005));
+  // salário varia uns centavos/reais de um mês para outro: mesmo tipo e pessoa com valor parecido (até 10%) conta como a mesma entrada
+  const parecido = (r, f) => r.pessoa === f.pessoa && (Math.abs(r.valor - f.valor) < 0.005 || (r.tipo === f.tipo && Math.abs(r.valor - f.valor) <= f.valor * 0.1));
+  const jaTem = f => doMes.some(r => r.fixaId === f.id || (!r.fixaId && parecido(r, f)));
   return (db.entradasFixas || []).filter(f => fixaAtiva(f, ym) && !(db.puladas?.[ym] || []).includes(f.id) && !jaTem(f))
     .map(f => ({ id: `rf_${f.id}_${ym}`, virtual: true, fixaId: f.id, mesRef: ym, data: `${ym}-${pad(diaEntrada(f, ym))}`, descricao: f.descricao, pessoa: f.pessoa, tipo: f.tipo, valor: f.valor, paraCasa: f.paraCasa ?? null, status: 'previsto' }));
 }
