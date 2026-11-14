@@ -493,7 +493,7 @@ function periodoFatura(c, ymFatura) {
   const ini = new Date(+ant.slice(0, 4), +ant.slice(5) - 1, dia(ant, virada(c, ant)));
   const fim = new Date(+fm.slice(0, 4), +fm.slice(5) - 1, dia(fm, virada(c, fm)) - 1);
   const f = d => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
-  return { de: f(ini), ate: f(fim), vence: `${pad(dia(ymFatura, Number(c.vencimento)))}/${ymFatura.slice(5)}`, mesFecha: fm, ajustado: c.viradas?.[fm] != null };
+  return { aberta: fim >= new Date(new Date().toDateString()), de: f(ini), ate: f(fim), vence: `${pad(dia(ymFatura, Number(c.vencimento)))}/${ymFatura.slice(5)}`, mesFecha: fm, ajustado: c.viradas?.[fm] != null };
 }
 function valorParcela(compra, i) {
   const p = Number(compra.parcelas) || 1;
@@ -518,8 +518,26 @@ function itensFatura(cartaoId, ym) {
 const totalFatura = (cartaoId, ym) => r2(soma(itensFatura(cartaoId, ym)));
 
 // Todas as saídas do mês, item a item
+/* ---------- Previsão do dia a dia (mercado, padaria, posto…) ---------- */
+// Gasto do dia a dia já lançado que é pago no mês: compras à vista nas faturas que vencem no mês + Pix/débito do mês
+function diaADiaReal(ym) {
+  let t = soma(db.gastos.filter(g => ymDe(g.data) === ym));
+  for (const c of db.cartoes) t += soma(itensFatura(c.id, ym).filter(i => i.tipo === 'compra' && !(Number(i.ref.parcelas) > 1) && i.categoria !== 'Juros e tarifas'));
+  return r2(t);
+}
+function mediaDiaADia() {
+  const atual = hojeYM(), vals = [1, 2, 3].map(k => diaADiaReal(addM(atual, -k))).filter(v => v > 0);
+  const agora = diaADiaReal(atual);
+  return r2(Math.max(agora, vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0));
+}
+const baseDiaADia = () => db.diaADia === 'nao' ? 0 : Number(db.diaADia) > 0 ? Number(db.diaADia) : mediaDiaADia();
+// Meses que ainda não fecharam: o que falta gastar no dia a dia (some conforme as compras de verdade são lançadas)
+const previsaoDiaADia = ym => ym < hojeYM() ? 0 : r2(Math.max(0, baseDiaADia() - diaADiaReal(ym)));
+
 function saidasDoMes(ym) {
   const out = [];
+  const prev = previsaoDiaADia(ym);
+  if (prev > 0) out.push({ descricao: 'Previsão do dia a dia', valor: prev, pessoa: 'Casal', categoria: 'Dia a dia (previsão)', origem: 'previsao' });
   for (const f of fixosAtivos(ym).filter(f => !ehCartao(f.forma))) out.push({ descricao: f.nome, valor: f.valor, pessoa: f.pessoa, categoria: f.categoria, origem: 'fixo' });
   for (const g of db.gastos.filter(g => ymDe(g.data) === ym)) out.push({ descricao: g.descricao, valor: g.valor, pessoa: g.pessoa, categoria: g.categoria, origem: 'gasto' });
   for (const c of db.cartoes) for (const it of itensFatura(c.id, ym)) out.push({ ...it, origem: 'cartao' });
@@ -582,7 +600,7 @@ function porPessoa(ym) {
   }
   return { res, f };
 }
-const comprometido = ym => r2(soma(fixosAtivos(ym)) + soma(db.cartoes, c => soma(itensFatura(c.id, ym).filter(i => i.tipo === 'compra'))));
+const comprometido = ym => r2(previsaoDiaADia(ym) + soma(fixosAtivos(ym)) + soma(db.cartoes, c => soma(itensFatura(c.id, ym).filter(i => i.tipo === 'compra'))));
 
 /* ============ Render ============ */
 function render() {
@@ -656,7 +674,7 @@ function rResumo() {
   $('#resumo').innerHTML = `
     <div class="grid kpis">
       <div class="card kpi"><div class="lbl"><span class="ico pos">${ic('entra')}</span>Entradas</div><div class="val">${brl(recebido + aReceber)}</div><div class="sub"><span class="pos">${brl(recebido)}</span> recebido${aReceber ? `<br><span class="warn-t">${brl(aReceber)}</span> a receber` : ''}</div></div>
-      <div class="card kpi"><div class="lbl"><span class="ico neg">${ic('sai')}</span>Saídas</div><div class="val">${brl(totSaidas)}</div><div class="sub">${brl(aPagar)} ainda a pagar</div></div>
+      <div class="card kpi"><div class="lbl"><span class="ico neg">${ic('sai')}</span>Saídas</div><div class="val">${brl(totSaidas)}</div><div class="sub">${brl(aPagar)} ainda a pagar${previsaoDiaADia(mes) > 0 ? `<br><span class="warn-t">${brl(previsaoDiaADia(mes))}</span> previstos do dia a dia` : ''}</div></div>
       <div class="card kpi"><div class="lbl"><span class="ico ${saldo < 0 ? 'neg' : 'pos'}">${ic('carteira')}</span>Saldo previsto</div><div class="val ${saldo < 0 ? 'neg' : 'pos'}">${brl(saldo)}</div><div class="sub">entradas − saídas</div></div>
       <div class="card kpi"><div class="lbl"><span class="ico acc">${ic('cofre')}</span>Reserva</div><div class="val">${brl(db.reserva)}</div><div class="sub">${custoBase ? `cobre ${mesesReserva.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${mesesReserva >= 0.95 && mesesReserva < 1.05 ? 'mês' : 'meses'} de gastos` : 'defina em Ajustes'}</div></div>
     </div>
@@ -675,8 +693,8 @@ function rResumo() {
     <h2>Para onde foi o dinheiro</h2>
     <div class="card">${catArr.length ? catArr.map(([c, v]) => `<div class="cat"><span>${esc(c)}</span><div class="bar"><i style="width:${v / maxCat * 100}%"></i></div><span>${brl(v)}</span></div>`).join('') : '<div class="empty">Sem gastos neste mês ainda.</div>'}</div>
 
-    <h2>Já comprometido nos próximos meses</h2>
-    <div class="card"><p class="small muted" style="margin:0 0 10px">Em cima: gastos fixos + parcelas de cartão já lançadas (o mínimo que sai). Embaixo: quanto sobra das entradas de todo mês, antes dos gastos do dia a dia.</p><div class="proj">${proj}</div></div>
+    <h2>Próximos meses</h2>
+    <div class="card"><p class="small muted" style="margin:0 0 10px">Em cima: o que deve sair (gastos fixos + parcelas já lançadas + a previsão do dia a dia). Embaixo: quanto sobra ou falta das entradas de todo mês.</p><div class="proj">${proj}</div></div>
   `;
 }
 
@@ -791,7 +809,8 @@ function rCartoes() {
       </div>
       ${(() => { const per = periodoFatura(c, mes); return `<div class="fat">
         <div class="fat-per">${ic('cal')}<p>Fatura de <b>${nomeMes(mes).split(' ')[0]}</b>: compras de <b>${per.de}</b> a <b>${per.ate}</b><br><span class="muted">vence <b style="color:var(--text)">${per.vence}</b>${per.ajustado ? ' · período ajustado' : ''}</span></p><button class="btn small" style="padding:5px 10px" data-virada="${c.id}">Mudar período</button></div>
-        <div class="fat-tot"><span class="lbl">Total da fatura</span><span class="cc-total">${brl(total)}</span></div>
+        <div class="fat-tot"><span class="lbl">Total da fatura${per.aberta ? ' até agora' : ''}</span><span class="cc-total">${brl(total)}</span></div>
+        ${per.aberta ? `<p class="small" style="margin:6px 0 0;color:var(--warn)">Fatura aberta: compras feitas até ${per.ate} ainda entram nela.</p>` : ''}
         ${total > 0 ? `<label class="small muted" style="display:flex;align-items:center;gap:8px;margin-top:6px;justify-content:flex-end"><input type="checkbox" class="chk" style="width:20px;height:20px" data-pagar="c:${c.id}" ${pago ? 'checked' : ''}> fatura paga</label>` : ''}
       </div>`; })()}
       ${c.limite > 0 ? `<div style="margin-top:12px"><div class="linha small"><span>Limite usado</span><span>${brl(usado)} de ${brl(c.limite)}</span></div><div class="bar ${pct > 85 ? 'bad' : pct > 60 ? 'warn' : ''}"><i style="width:${pct}%"></i></div></div>` : ''}
@@ -828,6 +847,15 @@ function rConfig() {
         ${db.divisao === 'fixo' ? `<div class="field"><label for="cfgPct">Parte de ${esc(PESSOAS[0])} (%) — ${esc(PESSOAS[1])} fica com o resto</label><input id="cfgPct" type="number" min="0" max="100" value="${Number(db.pctA ?? 50)}"></div>` : ''}
         <p class="small">O proporcional é bom para quem é autônomo: no mês em que um fatura mais, ele cobre uma parte maior.</p>
       </div>
+      <div class="card"><h2>Gasto do dia a dia</h2>
+        <p>Mercado, padaria, posto, lanches… Nos meses que ainda não fecharam, o app soma uma <b>previsão</b> desse gasto nas saídas, para o saldo não parecer maior do que vai ser. Conforme vocês lançam as compras, a previsão diminui.</p>
+        <div class="field"><select id="cfgDia">
+          <option value="auto" ${!(Number(db.diaADia) > 0) && db.diaADia !== 'nao' ? 'selected' : ''}>Automático: o que vocês costumam gastar (${brl(mediaDiaADia())} por mês)</option>
+          <option value="fixo" ${Number(db.diaADia) > 0 ? 'selected' : ''}>Valor que eu escolho</option>
+          <option value="nao" ${db.diaADia === 'nao' ? 'selected' : ''}>Não prever</option>
+        </select></div>
+        ${Number(db.diaADia) > 0 ? `<div class="field"><label for="cfgDiaValor">Quanto vocês gastam no dia a dia por mês</label><input id="cfgDiaValor" inputmode="decimal" value="${valorTxt(db.diaADia)}"></div>` : ''}
+      </div>
       <div class="card"><h2>Reserva de emergência</h2>
         <p>Sem salário fixo, a reserva é o que segura os meses fracos. O ideal é cobrir de 6 a 12 meses de gastos.</p>
         <div class="field"><label for="cfgReserva">Quanto vocês têm guardado hoje</label><input id="cfgReserva" inputmode="decimal" value="${valorTxt(db.reserva)}" placeholder="0,00"></div>
@@ -858,6 +886,8 @@ function rConfig() {
       </div>
     </div>`;
   [0, 1].forEach(i => $('#cfgNome' + i).onchange = e => { if (renomearPessoa(i, e.target.value)) { salvar(); toast('Nome atualizado em todos os lançamentos'); } else e.target.value = PESSOAS[i]; });
+  $('#cfgDia').onchange = e => { const v = e.target.value; db.diaADia = v === 'fixo' ? (mediaDiaADia() || 3000) : v === 'nao' ? 'nao' : null; salvar(); toast('Previsão do dia a dia atualizada'); };
+  if ($('#cfgDiaValor')) $('#cfgDiaValor').onchange = e => { const v = lerValor(e.target.value); if (isNaN(v) || v <= 0) return toast('Valor inválido'); db.diaADia = v; salvar(); toast('Previsão: ' + brl(v) + ' por mês'); };
   $('#cfgDivisao').onchange = e => { db.divisao = e.target.value; salvar(); toast('Divisão atualizada'); };
   if ($('#cfgPct')) $('#cfgPct').onchange = e => { db.pctA = Math.min(100, Math.max(0, Number(e.target.value) || 0)); salvar(); toast(`${PESSOAS[0]} ${db.pctA}% · ${PESSOAS[1]} ${100 - db.pctA}%`); };
 }
