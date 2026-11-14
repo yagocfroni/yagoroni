@@ -1385,7 +1385,8 @@ function aplicarSemente() {
     for (const col of db.semente ? ['cartoes'] : ['receitas', 'fixos', 'cartoes', 'compras', 'gastos'])
       for (const x of sem[col] || []) { const i = db[col].findIndex(y => y.id === x.id); if (i >= 0) db[col][i] = JSON.parse(JSON.stringify(x)); }
     if (Array.isArray(sem.pessoas)) db.pessoas = [...sem.pessoas];
-    if (sem.diaADia != null && db.diaADia == null) db.diaADia = sem.diaADia; // só se ainda não foi escolhido em Ajustes
+    // base do dia a dia: só troca se ainda não foi escolhida em Ajustes (ou se é o valor que veio da página antes)
+    if (sem.diaADia != null && (db.diaADia == null || Number(db.diaADia) === Number(sem.diaADiaAnterior))) db.diaADia = sem.diaADia;
     // correções pontuais vindas da página (ex.: fatura conferida com o banco)
     // Um lançamento pode ter outra identificação interna em aparelhos que receberam versões antigas dos dados:
     // por isso também é reconhecido pelo conteúdo (cartão, data, descrição, parcelas).
