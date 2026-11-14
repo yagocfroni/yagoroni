@@ -1149,6 +1149,22 @@ function sincronizarParcelas(e) {
   info.innerHTML = `Total <b>${brl(total)}</b> em ${n}x de <b>${brl(parc(0))}</b>.<br>` +
     (atual >= n ? `Em ${nome} é a <b>última parcela</b> (${n}/${n}).`
       : `Em ${nome}: parcela ${atual}/${n}. Depois dela ainda <b>faltam ${n - atual} parcela${n - atual > 1 ? 's' : ''} = ${brl(r2(falta))}</b>.`);
+  info.className = 'alert ok';
+  // Freio: compra parcelada NOVA — mostra o efeito nos próximos meses antes de salvar
+  const cart = cartaoPor($('#f_forma')?.value), data = $('#f_data')?.value;
+  if (!formAtual.id && n > 1 && cart && data && !(parseInt($('#f_parcelaAtual')?.value) > 0)) {
+    const ini = mesPrimeiraParcela({ data }, cart), fim = addM(ini, n - 1);
+    let pior = null;
+    for (let k = 0; k < n; k++) {
+      const m = addM(ini, k), antes = r2(soma(entradasDoMes(m)) - soma(saidasDoMes(m))), depois = r2(antes - parc(k));
+      if (depois < 0 && (!pior || depois < pior.v)) pior = { m, v: depois, antes };
+    }
+    info.innerHTML = `Total <b>${brl(total)}</b> em ${n}x de <b>${brl(parc(0))}</b>. 1ª parcela na fatura de <b>${nomeMes(ini)}</b>, última em <b>${nomeMes(fim)}</b>.<br><br>` +
+      `Essa compra tira <b>${brl(parc(n - 1))} por mês</b> do orçamento por ${n} meses.<br>` +
+      (pior ? `⚠️ <b>Com ela, ${nomeMes(pior.m)} fica em ${brl(pior.v)}</b>${pior.antes < 0 ? ` (sem ela já ia ficar em ${brl(pior.antes)})` : ` (sem ela fecharia em ${brl(pior.antes)})`}. Vale mesmo parcelar? Dá para esperar ou pagar à vista?`
+            : `✓ Cabe: os meses continuam positivos.`);
+    if (pior) info.className = 'alert bad';
+  }
   info.style.display = '';
 }
 $('#dlgCampos').addEventListener('input', sincronizarParcelas);
