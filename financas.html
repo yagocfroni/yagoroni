@@ -270,7 +270,7 @@ const KEY = 'financas-v1';
 // Os nomes das pessoas ficam só nos dados do aparelho (nunca no código publicado).
 let PESSOAS = ['Pessoa 1', 'Pessoa 2'];
 let RESP = [...PESSOAS, 'Casal'];
-const CATEGORIAS = ['Moradia', 'Contas da casa', 'Mercado', 'Alimentação fora', 'Transporte', 'Saúde', 'Impostos (DAS/MEI/INSS)', 'Trabalho', 'Educação', 'Assinaturas', 'Lazer', 'Compras', 'Pets', 'Outros'];
+const CATEGORIAS = ['Moradia', 'Contas da casa', 'Mercado', 'Alimentação fora', 'Transporte', 'Saúde', 'Impostos (DAS/MEI/INSS)', 'Juros e tarifas', 'Trabalho', 'Educação', 'Assinaturas', 'Lazer', 'Compras', 'Pets', 'Outros'];
 const TIPOS_ENTRADA = ['Salário', 'Serviço / Freela', 'Pró-labore', 'Cliente fixo', 'Venda', 'Reembolso', 'Outros'];
 const FORMAS = { pix: 'Pix', boleto: 'Boleto', debito: 'Débito', dinheiro: 'Dinheiro' };
 const VAZIO = () => ({ receitas: [], fixos: [], cartoes: [], compras: [], gastos: [], pagos: {}, ajustes: {}, reserva: 0, divisao: '50', pctA: 50, pessoas: null });
@@ -497,7 +497,7 @@ function periodoFatura(c, ymFatura) {
 function valorParcela(compra, i) {
   const p = Number(compra.parcelas) || 1;
   const base = Math.floor(Math.round(compra.valor * 100) / p) / 100; // evita erro de centavo (269,40 / 3 = 89,80)
-  return i === p - 1 ? r2(compra.valor - base * (p - 1)) : base;
+  return i === 0 ? r2(compra.valor - base * (p - 1)) : base; // como os bancos: o centavo que sobra vai na 1ª parcela
 }
 // Itens que caem na fatura de um cartão num mês (mês de vencimento)
 function itensFatura(cartaoId, ym) {
@@ -1297,6 +1297,12 @@ function aplicarSemente() {
     for (const col of db.semente ? ['cartoes'] : ['receitas', 'fixos', 'cartoes', 'compras', 'gastos'])
       for (const x of sem[col] || []) { const i = db[col].findIndex(y => y.id === x.id); if (i >= 0) db[col][i] = JSON.parse(JSON.stringify(x)); }
     if (Array.isArray(sem.pessoas)) db.pessoas = [...sem.pessoas];
+    // correções pontuais vindas da página (ex.: fatura conferida com o banco)
+    for (const [col, ids] of Object.entries(sem.remover || {})) db[col] = db[col].filter(x => !ids.includes(x.id));
+    for (const [col, ids] of Object.entries(sem.atualizar || {})) for (const id of ids) {
+      const novo = (sem[col] || []).find(x => x.id === id); if (!novo) continue;
+      const i = db[col].findIndex(x => x.id === id); if (i >= 0) db[col][i] = JSON.parse(JSON.stringify(novo)); else db[col].push(JSON.parse(JSON.stringify(novo)));
+    }
     juntarDados(sem);
   }
   db.semente = sem.semente;
