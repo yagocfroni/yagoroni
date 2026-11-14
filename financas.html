@@ -1247,8 +1247,10 @@ function juntarDados(outro) {
   if (!db.pessoas && Array.isArray(outro.pessoas) && outro.pessoas.length === 2) db.pessoas = [...outro.pessoas];
   for (const col of ['receitas', 'entradasFixas', 'fixos', 'cartoes', 'compras', 'gastos']) {
     const ids = new Set(db[col].map(x => x.id));
-    const chaves = col === 'compras' ? new Set(db.compras.map(chaveCompra)) : null;
-    const add = (outro[col] || []).filter(x => x && !ids.has(x.id) && !(chaves && chaves.has(chaveCompra(x))));
+    const chaveRec = r => `${r.data}|${r.pessoa}|${Number(r.valor).toFixed(2)}`; // mesma entrada lançada nos dois aparelhos
+    const chaves = col === 'compras' ? new Set(db.compras.map(chaveCompra)) : col === 'receitas' ? new Set(db.receitas.map(chaveRec)) : null;
+    const chave = col === 'compras' ? chaveCompra : chaveRec;
+    const add = (outro[col] || []).filter(x => x && !ids.has(x.id) && !(chaves && chaves.has(chave(x))));
     db[col].push(...add); novos[col] = add.length;
   }
   for (const k of ['pagos', 'ajustes']) for (const [m, obj] of Object.entries(outro[k] || {})) db[k][m] = { ...obj, ...(db[k][m] || {}) };
