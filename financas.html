@@ -1386,10 +1386,23 @@ function aplicarSemente() {
       for (const x of sem[col] || []) { const i = db[col].findIndex(y => y.id === x.id); if (i >= 0) db[col][i] = JSON.parse(JSON.stringify(x)); }
     if (Array.isArray(sem.pessoas)) db.pessoas = [...sem.pessoas];
     // correções pontuais vindas da página (ex.: fatura conferida com o banco)
-    for (const [col, ids] of Object.entries(sem.remover || {})) db[col] = db[col].filter(x => !ids.includes(x.id));
+    // Um lançamento pode ter outra identificação interna em aparelhos que receberam versões antigas dos dados:
+    // por isso também é reconhecido pelo conteúdo (cartão, data, descrição, parcelas).
+    const mesmo = (x, y) => (x.cartaoId || '') === (y.cartaoId || '') && x.data === y.data && x.descricao === y.descricao && (Number(x.parcelas) || 1) === (Number(y.parcelas) || 1);
+    const casa = (x, d) => typeof d === 'string' ? x.id === d : (x.cartaoId || '') === (d.cartaoId || '') && x.data === d.data && Math.abs(Number(x.valor) - Number(d.valor)) < 0.005;
+    for (const [col, lista] of Object.entries(sem.remover || {})) db[col] = db[col].filter(x => !lista.some(d => casa(x, d)));
     for (const [col, ids] of Object.entries(sem.atualizar || {})) for (const id of ids) {
       const novo = (sem[col] || []).find(x => x.id === id); if (!novo) continue;
-      const i = db[col].findIndex(x => x.id === id); if (i >= 0) db[col][i] = JSON.parse(JSON.stringify(novo)); else db[col].push(JSON.parse(JSON.stringify(novo)));
+      const copia = JSON.parse(JSON.stringify(novo));
+      let i = db[col].findIndex(x => x.id === id);
+      if (i < 0 && col === 'compras') {
+        const iguais = db[col].map((x, k) => [x, k]).filter(([x]) => mesmo(x, novo) && !ids.includes(x.id));
+        const exato = iguais.find(([x]) => Math.abs(Number(x.valor) - Number(novo.valor)) < 0.005);
+        i = exato ? exato[1] : iguais.length === 1 ? iguais[0][1] : -1;
+      }
+      if (i >= 0) db[col][i] = copia; else db[col].push(copia);
+      // limpa cópias que versões anteriores possam ter deixado
+      if (col === 'compras') db.compras = db.compras.filter(x => x === copia || x.id === id || ids.includes(x.id) || !mesmo(x, novo));
     }
     juntarDados(sem);
   }
