@@ -537,7 +537,7 @@ const previsaoDiaADia = ym => ym < hojeYM() ? 0 : r2(Math.max(0, baseDiaADia() -
 function saidasDoMes(ym) {
   const out = [];
   const prev = previsaoDiaADia(ym);
-  if (prev > 0) out.push({ descricao: 'Previsão do dia a dia', valor: prev, pessoa: 'Casal', categoria: 'Dia a dia (previsão)', origem: 'previsao' });
+  if (prev > 0) out.push({ descricao: 'Previsão do dia a dia', valor: prev, pessoa: 'Casal', categoria: 'Previsão (ainda não gasto)', origem: 'previsao' });
   for (const f of fixosAtivos(ym).filter(f => !ehCartao(f.forma))) out.push({ descricao: f.nome, valor: f.valor, pessoa: f.pessoa, categoria: f.categoria, origem: 'fixo' });
   for (const g of db.gastos.filter(g => ymDe(g.data) === ym)) out.push({ descricao: g.descricao, valor: g.valor, pessoa: g.pessoa, categoria: g.categoria, origem: 'gasto' });
   for (const c of db.cartoes) for (const it of itensFatura(c.id, ym)) out.push({ ...it, origem: 'cartao' });
@@ -674,7 +674,7 @@ function rResumo() {
   $('#resumo').innerHTML = `
     <div class="grid kpis">
       <div class="card kpi"><div class="lbl"><span class="ico pos">${ic('entra')}</span>Entradas</div><div class="val">${brl(recebido + aReceber)}</div><div class="sub"><span class="pos">${brl(recebido)}</span> recebido${aReceber ? `<br><span class="warn-t">${brl(aReceber)}</span> a receber` : ''}</div></div>
-      <div class="card kpi"><div class="lbl"><span class="ico neg">${ic('sai')}</span>Saídas</div><div class="val">${brl(totSaidas)}</div><div class="sub">${brl(aPagar)} ainda a pagar${previsaoDiaADia(mes) > 0 ? `<br><span class="warn-t">${brl(previsaoDiaADia(mes))}</span> previstos do dia a dia` : ''}</div></div>
+      <div class="card kpi"><div class="lbl"><span class="ico neg">${ic('sai')}</span>Saídas</div><div class="val">${brl(totSaidas)}</div><div class="sub">${brl(aPagar)} ainda a pagar${previsaoDiaADia(mes) > 0 ? `<br><span class="warn-t">${brl(previsaoDiaADia(mes))}</span> previsão do dia a dia (ainda não gasto)` : ''}</div></div>
       <div class="card kpi"><div class="lbl"><span class="ico ${saldo < 0 ? 'neg' : 'pos'}">${ic('carteira')}</span>Saldo previsto</div><div class="val ${saldo < 0 ? 'neg' : 'pos'}">${brl(saldo)}</div><div class="sub">entradas − saídas</div></div>
       <div class="card kpi"><div class="lbl"><span class="ico acc">${ic('cofre')}</span>Reserva</div><div class="val">${brl(db.reserva)}</div><div class="sub">${custoBase ? `cobre ${mesesReserva.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${mesesReserva >= 0.95 && mesesReserva < 1.05 ? 'mês' : 'meses'} de gastos` : 'defina em Ajustes'}</div></div>
     </div>
