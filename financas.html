@@ -602,6 +602,16 @@ function porPessoa(ym) {
   }
   return { res, f };
 }
+// Parcelas do mês: compras parceladas nos cartões + empréstimos/financiamentos com número de parcelas (o carro fica de fora: é fixo)
+function parcelasDoMes(ym) {
+  const itens = [];
+  for (const c of db.cartoes) for (const i of itensFatura(c.id, ym)) if (i.tipo === 'compra' && Number(i.ref.parcelas) > 1) itens.push({ descricao: i.descricao, valor: i.valor, parcela: i.parcela, onde: c.nome });
+  for (const f of fixosAtivos(ym)) if (f.parcelasTotal && !/CARRO/i.test(f.nome)) itens.push({ descricao: f.nome, valor: f.valor, parcela: f.parcelaTxt, onde: 'empréstimo' });
+  return itens.sort((a, b) => b.valor - a.valor);
+}
+const tetoParcelas = () => Number(db.tetoParcelas) > 0 ? Number(db.tetoParcelas) : 900;
+// último mês em que ainda existe alguma parcela
+function fimDasParcelas(ym) { let m = ym, ult = null; for (let k = 0; k < 60; k++) { if (parcelasDoMes(m).length) ult = m; m = addM(m, 1); } return ult; }
 const comprometido = ym => r2(previsaoDiaADia(ym) + soma(fixosAtivos(ym)) + soma(db.cartoes, c => soma(itensFatura(c.id, ym).filter(i => i.tipo === 'compra'))));
 
 /* ============ Render ============ */
@@ -686,6 +696,15 @@ function rResumo() {
       ${alerta}
     </div>
 
+    ${(() => {
+      const it = parcelasDoMes(mes), tot = r2(soma(it)), teto = tetoParcelas(), pct = Math.min(100, tot / teto * 100), acima = r2(tot - teto), fim = fimDasParcelas(mes);
+      return `<h2>Parcelas do mês</h2>
+      <div class="card">
+        <div class="linha" style="padding-bottom:8px"><span>Parcelas de compras e empréstimos <span class="small">(o carro não entra)</span></span><b class="${acima > 0 ? 'neg' : 'pos'}">${brl(tot)} <span class="small muted" style="font-weight:400">de ${brl(teto)}</span></b></div>
+        <div class="bar ${acima > 0 ? 'bad' : pct > 80 ? 'warn' : ''}"><i style="width:${pct}%"></i></div>
+        <div class="alert ${acima > 0 ? 'bad' : 'ok'}" style="margin-top:10px">${acima > 0 ? `<b>${brl(acima)} acima do teto.</b> Nada de parcelar compra nova este mês.` : `Dentro do teto: ainda cabem <b>${brl(-acima)}</b> de parcelas, se for necessário.`}${fim ? ` As parcelas que existem hoje acabam em <b>${nomeMes(fim)}</b>.` : ''}</div>
+        ${it.length ? `<details style="margin-top:8px"><summary class="small muted" style="cursor:pointer">Ver as ${it.length} parcelas</summary><table style="width:100%;font-size:13px;margin-top:6px;font-variant-numeric:tabular-nums">${it.map(i => `<tr><td>${esc(i.descricao)} <span class="small muted">${esc(i.onde)}</span></td><td class="small muted">${esc(i.parcela || '')}</td><td style="text-align:right">${brl(i.valor)}</td></tr>`).join('')}</table></details>` : ''}
+      </div>`; })()}
     <h2>Cada um</h2>
     <div class="grid two">${PESSOAS.map(cardPessoa).join('')}</div>
 
@@ -849,6 +868,10 @@ function rConfig() {
         ${db.divisao === 'fixo' ? `<div class="field"><label for="cfgPct">Parte de ${esc(PESSOAS[0])} (%) — ${esc(PESSOAS[1])} fica com o resto</label><input id="cfgPct" type="number" min="0" max="100" value="${Number(db.pctA ?? 50)}"></div>` : ''}
         <p class="small">O proporcional é bom para quem é autônomo: no mês em que um fatura mais, ele cobre uma parte maior.</p>
       </div>
+      <div class="card"><h2>Teto de parcelas</h2>
+        <p>Quanto, no máximo, pode ir para parcelas por mês (compras parceladas e empréstimos; o carro não entra). Uma regra comum é <b>10% do que entra</b>.</p>
+        <div class="field"><label for="cfgTeto">Teto por mês (R$)</label><input id="cfgTeto" inputmode="decimal" value="${valorTxt(tetoParcelas())}"></div>
+      </div>
       <div class="card"><h2>Gasto do dia a dia</h2>
         <p>Mercado, padaria, posto, lanches… Nos meses que ainda não fecharam, o app soma uma <b>previsão</b> desse gasto nas saídas, para o saldo não parecer maior do que vai ser. Conforme vocês lançam as compras, a previsão diminui.</p>
         <div class="field"><select id="cfgDia">
@@ -888,6 +911,7 @@ function rConfig() {
       </div>
     </div>`;
   [0, 1].forEach(i => $('#cfgNome' + i).onchange = e => { if (renomearPessoa(i, e.target.value)) { salvar(); toast('Nome atualizado em todos os lançamentos'); } else e.target.value = PESSOAS[i]; });
+  $('#cfgTeto').onchange = e => { const v = lerValor(e.target.value); if (isNaN(v) || v <= 0) return toast('Valor inválido'); db.tetoParcelas = v; salvar(); toast('Teto de parcelas: ' + brl(v)); };
   $('#cfgDia').onchange = e => { const v = e.target.value; db.diaADia = v === 'fixo' ? (mediaDiaADia() || 3000) : v === 'nao' ? 'nao' : null; salvar(); toast('Previsão do dia a dia atualizada'); };
   if ($('#cfgDiaValor')) $('#cfgDiaValor').onchange = e => { const v = lerValor(e.target.value); if (isNaN(v) || v <= 0) return toast('Valor inválido'); db.diaADia = v; salvar(); toast('Previsão: ' + brl(v) + ' por mês'); };
   $('#cfgDivisao').onchange = e => { db.divisao = e.target.value; salvar(); toast('Divisão atualizada'); };
