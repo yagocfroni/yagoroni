@@ -273,7 +273,7 @@ let RESP = [...PESSOAS, 'Casal'];
 const CATEGORIAS = ['Moradia', 'Contas da casa', 'Mercado', 'Alimentação fora', 'Transporte', 'Saúde', 'Impostos (DAS/MEI/INSS)', 'Juros e tarifas', 'Trabalho', 'Educação', 'Assinaturas', 'Lazer', 'Compras', 'Pets', 'Outros'];
 const TIPOS_ENTRADA = ['Salário', 'Serviço / Freela', 'Pró-labore', 'Cliente fixo', 'Venda', 'Reembolso', 'Outros'];
 const FORMAS = { pix: 'Pix', boleto: 'Boleto', debito: 'Débito', dinheiro: 'Dinheiro' };
-const VAZIO = () => ({ receitas: [], fixos: [], cartoes: [], compras: [], gastos: [], pagos: {}, ajustes: {}, reserva: 0, divisao: '50', pctA: 50, pessoas: null });
+const VAZIO = () => ({ receitas: [], entradasFixas: [], puladas: {}, fixos: [], cartoes: [], compras: [], gastos: [], pagos: {}, ajustes: {}, reserva: 0, divisao: '50', pctA: 50, pessoas: null });
 
 let db = carregar();
 let mes = hojeYM();
@@ -308,7 +308,7 @@ function renomearPessoa(i, novo) {
   novo = String(novo || '').trim(); const velho = PESSOAS[i];
   if (!novo || novo === velho || novo === 'Casal' || PESSOAS.includes(novo)) return false;
   const troca = o => { if (o.pessoa === velho) o.pessoa = novo; if (o.titular === velho) o.titular = novo; };
-  [...db.receitas, ...db.fixos, ...db.cartoes, ...db.compras, ...db.gastos].forEach(troca);
+  [...db.receitas, ...(db.entradasFixas || []), ...db.fixos, ...db.cartoes, ...db.compras, ...db.gastos].forEach(troca);
   db.pessoas = [...PESSOAS]; db.pessoas[i] = novo; prepararPessoas(); return true;
 }
 function salvar() {
@@ -419,6 +419,7 @@ function nomeMes(ym, curto) {
 function dataBR(iso) { if (!iso) return ''; const [y, m, d] = iso.split('-'); return `${d}/${m}`; }
 function lerValor(s) {
   s = String(s ?? '').trim().replace(/[R$\s]/g, '');
+  if (s === '') return NaN; // campo vazio não é zero
   if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
   const n = Number(s);
   return isFinite(n) ? r2(n) : NaN;
@@ -537,7 +538,25 @@ function contasDoMes(ym) {
 }
 // Parte que vai para a casa (ex.: salário 3.500, para a casa 2.500). O resto é da pessoa e não entra nas contas.
 const paraCasa = r => (r.paraCasa != null && r.paraCasa >= 0 && r.paraCasa < r.valor) ? r.paraCasa : r.valor;
-const entradasDoMes = ym => db.receitas.filter(r => ymDe(r.data) === ym).map(r => ({ ...r, bruto: r.valor, valor: paraCasa(r) }));
+// Entradas de todo mês (salários, clientes fixos): aparecem sozinhas como "a receber" até serem marcadas
+function quintoDiaUtil(ym) {
+  const [y, m] = ym.split('-').map(Number); let n = 0;
+  const feriados = ['01-01', '04-21', '05-01', '09-07', '10-12', '11-02', '11-15', '11-20', '12-25']; // feriados nacionais fixos
+  for (let d = 1; d <= 31; d++) { const dt = new Date(y, m - 1, d); if (dt.getMonth() !== m - 1) break; const w = dt.getDay(); if (w && w < 6 && !feriados.includes(`${pad(m)}-${pad(d)}`) && ++n === 5) return d; }
+  return 5;
+}
+const diaEntrada = (f, ym) => { if (f.dia === 'du5') return quintoDiaUtil(ym); const [y, m] = ym.split('-').map(Number); return Math.min(Number(f.dia) || 1, new Date(y, m, 0).getDate()); };
+const fixaAtiva = (f, ym) => f.inicio <= ym && (!f.fim || ym <= f.fim);
+function entradasPrevistas(ym) {
+  return (db.entradasFixas || []).filter(f => fixaAtiva(f, ym) && !(db.puladas?.[ym] || []).includes(f.id) && !db.receitas.some(r => r.fixaId === f.id && r.mesRef === ym))
+    .map(f => ({ id: `rf_${f.id}_${ym}`, virtual: true, fixaId: f.id, mesRef: ym, data: `${ym}-${pad(diaEntrada(f, ym))}`, descricao: f.descricao, pessoa: f.pessoa, tipo: f.tipo, valor: f.valor, paraCasa: f.paraCasa ?? null, status: 'previsto' }));
+}
+// Transforma a entrada prevista de um mês num lançamento de verdade (para marcar recebido ou mudar o valor só naquele mês)
+function materializar(vid) {
+  const v = entradasPrevistas(vid.slice(-7)).find(x => x.id === vid); if (!v) return null;
+  const { virtual, ...r } = v; r.id = uid(); db.receitas.push(r); return r;
+}
+const entradasDoMes = ym => [...db.receitas.filter(r => ymDe(r.data) === ym), ...entradasPrevistas(ym)].map(r => ({ ...r, bruto: r.valor, valor: paraCasa(r) }));
 
 // Divide o valor de um item do Casal entre as duas pessoas
 function fatiaCasal(ym) {
@@ -628,7 +647,8 @@ function rResumo() {
       <div class="v">${brl(c.valor)}</div></div>`;
   }).join('') : `<div class="empty">Nenhuma conta neste mês.</div>`;
 
-  const proj = [1, 2, 3, 4, 5, 6].map(k => { const m = addM(mes, k); return `<div><span>${nomeMes(m, true)}</span><b>${brl(comprometido(m))}</b></div>`; }).join('');
+  const proj = [1, 2, 3, 4, 5, 6].map(k => { const m = addM(mes, k), ent = soma(entradasDoMes(m)), sai = comprometido(m), sobra = r2(ent - sai);
+    return `<div><span>${nomeMes(m, true)}</span><b>${brl(sai)}</b>${ent ? `<small class="${sobra < 0 ? 'neg' : 'pos'}" style="display:block;font-size:11.5px">${sobra < 0 ? 'faltam' : 'sobram'} ${brl(Math.abs(sobra))}</small>` : ''}</div>`; }).join('');
 
   $('#resumo').innerHTML = `
     <div class="grid kpis">
@@ -653,7 +673,7 @@ function rResumo() {
     <div class="card">${catArr.length ? catArr.map(([c, v]) => `<div class="cat"><span>${esc(c)}</span><div class="bar"><i style="width:${v / maxCat * 100}%"></i></div><span>${brl(v)}</span></div>`).join('') : '<div class="empty">Sem gastos neste mês ainda.</div>'}</div>
 
     <h2>Já comprometido nos próximos meses</h2>
-    <div class="card"><p class="small muted" style="margin:0 0 10px">Gastos fixos + parcelas de cartão já lançadas. É o mínimo que vocês precisam faturar em cada mês.</p><div class="proj">${proj}</div></div>
+    <div class="card"><p class="small muted" style="margin:0 0 10px">Em cima: gastos fixos + parcelas de cartão já lançadas (o mínimo que sai). Embaixo: quanto sobra das entradas de todo mês, antes dos gastos do dia a dia.</p><div class="proj">${proj}</div></div>
   `;
 }
 
@@ -668,14 +688,23 @@ function rEntradas() {
       <div class="card kpi"><div class="lbl">A receber</div><div class="val">${brl(soma(ent.filter(r => r.status === 'previsto')))}</div></div>
     </div>
     <div class="row-head"><h2>Entradas de ${nomeMes(mes)}</h2><button class="btn primary" data-acao="novaEntrada">+ Entrada</button></div>
-    <p class="small muted" style="margin:-4px 0 10px">Como vocês são autônomos, lance cada pagamento quando ele cair. Pagamento combinado que ainda não caiu? Lance como <b>a receber</b> e marque quando entrar.</p>
+    <p class="small muted" style="margin:-4px 0 10px">As entradas de todo mês aparecem sozinhas como <b>a receber</b>: marque ✓ quando o dinheiro cair. Valor diferente neste mês? Use ✎. Não vai entrar? Use ✕. Pagamento extra (um freela, por exemplo)? Use <b>+ Entrada</b>.</p>
     <div class="list">${ent.length ? ent.map(r => `
       <div class="item">
         <input type="checkbox" class="chk" data-receber="${r.id}" ${r.status !== 'previsto' ? 'checked' : ''} aria-label="Recebido">
-        <div class="main"><div class="t">${esc(r.descricao || r.tipo)}</div><div class="s">${dataBR(r.data)} · ${esc(r.tipo)} ${tag(r.pessoa)} ${r.status === 'previsto' ? '<span class="tag prev">a receber</span>' : ''}</div></div>
+        <div class="main"><div class="t">${esc(r.descricao || r.tipo)}</div><div class="s">${dataBR(r.data)} · ${esc(r.tipo)} ${tag(r.pessoa)} ${r.status === 'previsto' ? '<span class="tag prev">a receber</span>' : ''} ${r.fixaId ? '<span class="tag">todo mês</span>' : ''}</div></div>
         <div class="v pos">${brl(r.valor)}${r.bruto > r.valor ? `<div class="small muted" style="font-weight:400;text-align:right">de ${brl(r.bruto)}</div>` : ''}</div>
         <div class="acts"><button class="icon" data-editar="receitas:${r.id}" aria-label="Editar">✎</button><button class="icon" data-excluir="receitas:${r.id}" aria-label="Excluir">✕</button></div>
       </div>`).join('') : '<div class="empty">Nenhuma entrada neste mês.</div>'}</div>`;
+  const fixas = db.entradasFixas || [];
+  $('#entradas').insertAdjacentHTML('beforeend', `
+    <div class="row-head"><h2>Entradas de todo mês</h2><button class="btn" data-acao="novaEntradaFixa">+ Entrada de todo mês</button></div>
+    <div class="list">${fixas.length ? fixas.map(f => `
+      <div class="item">
+        <div class="main"><div class="t">${esc(f.descricao)}</div><div class="s">${f.dia === 'du5' ? '5º dia útil' : 'dia ' + f.dia} · ${esc(f.tipo)} ${tag(f.pessoa)} ${f.fim ? `<span class="tag">até ${nomeMes(f.fim, true)}</span>` : ''}</div></div>
+        <div class="v pos">${brl(f.paraCasa != null && f.paraCasa < f.valor ? f.paraCasa : f.valor)}${f.paraCasa != null && f.paraCasa < f.valor ? `<div class="small muted" style="font-weight:400;text-align:right">de ${brl(f.valor)}</div>` : ''}</div>
+        <div class="acts"><button class="icon" data-editar="entradasFixas:${f.id}" aria-label="Editar">✎</button><button class="icon" data-excluir="entradasFixas:${f.id}" aria-label="Excluir">✕</button></div>
+      </div>`).join('') : '<div class="empty">Cadastre salários e clientes fixos: eles passam a aparecer sozinhos todo mês.</div>'}</div>`);
 }
 
 let visaoGastos = (() => { try { return localStorage.getItem('visao-gastos') || 'compra'; } catch (e) { return 'compra'; } })();
@@ -848,6 +877,20 @@ const FORMS = {
       { n: 'paraCasa', l: 'Quanto vai para a casa (R$)', t: 'valor', req: false, full: true, hint: 'Deixe vazio se vai tudo. Ex.: salário 3.500, para a casa 2.500 — o resto fica com a pessoa e não entra nas contas.' },
     ],
     salvar: v => { if (isNaN(v.paraCasa) || v.paraCasa >= v.valor) v.paraCasa = null; upsert('receitas', v); },
+  },
+  entradasFixas: {
+    titulo: 'Entrada de todo mês', fem: true,
+    campos: () => [
+      { n: 'descricao', l: 'Nome', t: 'text', full: true, ph: 'ex.: Salário, Cliente da ótica' },
+      { n: 'valor', l: 'Valor (R$)', t: 'valor' },
+      { n: 'dia', l: 'Quando cai', t: 'select', o: [{ v: 'du5', l: '5º dia útil' }, ...Array.from({ length: 31 }, (_, k) => ({ v: String(k + 1), l: 'dia ' + (k + 1) }))], d: '5' },
+      { n: 'pessoa', l: 'Quem recebe', t: 'select', o: lista(PESSOAS) },
+      { n: 'tipo', l: 'Tipo', t: 'select', o: lista(TIPOS_ENTRADA) },
+      { n: 'paraCasa', l: 'Quanto vai para a casa (R$)', t: 'valor', req: false, full: true, hint: 'Deixe vazio se vai tudo.' },
+      { n: 'inicio', l: 'A partir de (mês)', t: 'month', d: mes },
+      { n: 'fim', l: 'Até (opcional)', t: 'month', req: false },
+    ],
+    salvar: v => { if (isNaN(v.paraCasa) || v.paraCasa >= v.valor) v.paraCasa = null; v.fim = v.fim || null; upsert('entradasFixas', v); },
   },
   gastos: {
     titulo: 'Gasto',
@@ -1115,6 +1158,7 @@ async function perguntar(texto, valor = '', titulo = '') {
 /* ============ Ações ============ */
 const ACOES = {
   novaEntrada: () => abrirForm('receitas'),
+  novaEntradaFixa: () => abrirForm('entradasFixas'),
   novoGasto: () => abrirForm('gastos'),
   novoFixo: () => abrirForm('fixos'),
   novoCartao: () => abrirForm('cartoes'),
@@ -1198,7 +1242,7 @@ $('#importFile').onchange = async e => {
 function juntarDados(outro) {
   const novos = {};
   if (!db.pessoas && Array.isArray(outro.pessoas) && outro.pessoas.length === 2) db.pessoas = [...outro.pessoas];
-  for (const col of ['receitas', 'fixos', 'cartoes', 'compras', 'gastos']) {
+  for (const col of ['receitas', 'entradasFixas', 'fixos', 'cartoes', 'compras', 'gastos']) {
     const ids = new Set(db[col].map(x => x.id));
     const chaves = col === 'compras' ? new Set(db.compras.map(chaveCompra)) : null;
     const add = (outro[col] || []).filter(x => x && !ids.has(x.id) && !(chaves && chaves.has(chaveCompra(x))));
@@ -1238,7 +1282,11 @@ document.addEventListener('click', async e => {
   if (!t) return;
   if (t.dataset.tab) { aba = t.dataset.tab; render(); window.scrollTo({ top: 0 }); return; }
   if (t.dataset.acao) return ACOES[t.dataset.acao]();
-  if (t.dataset.editar) { const [col, id] = t.dataset.editar.split(':'); return abrirForm(col, db[col].find(x => x.id === id)); }
+  if (t.dataset.editar) {
+    const [col, id] = t.dataset.editar.split(':');
+    if (col === 'receitas' && id.startsWith('rf_')) { const r = materializar(id); salvar(); return abrirForm('receitas', r); }
+    return abrirForm(col, db[col].find(x => x.id === id));
+  }
   if (t.dataset.visao) { visaoGastos = t.dataset.visao; try { localStorage.setItem('visao-gastos', visaoGastos); } catch (e) {} render(); return; }
   if (t.dataset.virada) {
     const c = cartaoPor(t.dataset.virada), fm = mesFechaDaFatura(c, mes), per = periodoFatura(c, mes);
@@ -1266,6 +1314,11 @@ document.addEventListener('click', async e => {
   }
   if (t.dataset.excluir) {
     const [col, id] = t.dataset.excluir.split(':');
+    if (col === 'receitas' && id.startsWith('rf_')) {
+      const f = db.entradasFixas.find(x => x.id === id.slice(3, -8));
+      if (!await confirmar(`"${f.descricao}" não vai entrar em ${nomeMes(mes)}? (Nos outros meses continua aparecendo.)`, 'Não vai entrar')) return;
+      (db.puladas[mes] ||= []).push(f.id); salvar(); return;
+    }
     if (col === 'cartoes') {
       const n = db.compras.filter(c => c.cartaoId === id).length;
       if (!await confirmar(`Excluir este cartão${n ? ` e as ${n} compras lançadas nele` : ''}?`)) return;
@@ -1281,7 +1334,7 @@ document.addEventListener('click', async e => {
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.pagar) { (db.pagos[mes] ||= {})[t.dataset.pagar] = t.checked; if (!t.checked) delete db.pagos[mes][t.dataset.pagar]; salvar(); }
-  if (t.dataset.receber) { const r = db.receitas.find(x => x.id === t.dataset.receber); r.status = t.checked ? 'recebido' : 'previsto'; salvar(); }
+  if (t.dataset.receber) { const r = t.dataset.receber.startsWith('rf_') ? materializar(t.dataset.receber) : db.receitas.find(x => x.id === t.dataset.receber); if (r) { r.status = t.checked ? 'recebido' : 'previsto'; salvar(); } }
 });
 $('#prev').onclick = () => { mes = addM(mes, -1); render(); };
 $('#next').onclick = () => { mes = addM(mes, 1); render(); };
