@@ -610,6 +610,9 @@ function parcelasDoMes(ym) {
   return itens.sort((a, b) => b.valor - a.valor);
 }
 const tetoParcelas = () => Number(db.tetoParcelas) > 0 ? Number(db.tetoParcelas) : 900;
+// Total dos cartões: soma das faturas que vencem no mês (parcelas + à vista + juros), comparada com um teto
+const tetoCartoes = () => Number(db.tetoCartoes) > 0 ? Number(db.tetoCartoes) : 4500;
+const cartoesDoMes = ym => db.cartoes.map(c => ({ nome: c.nome, valor: totalFatura(c.id, ym), aberta: periodoFatura(c, ym).aberta, hojeVai: mesPrimeiraParcela({ data: hojeISO() }, c) }));
 // último mês em que ainda existe alguma parcela
 function fimDasParcelas(ym) { let m = ym, ult = null; for (let k = 0; k < 60; k++) { if (parcelasDoMes(m).length) ult = m; m = addM(m, 1); } return ult; }
 const comprometido = ym => r2(previsaoDiaADia(ym) + soma(fixosAtivos(ym)) + soma(db.cartoes, c => soma(itensFatura(c.id, ym).filter(i => i.tipo === 'compra'))));
@@ -705,6 +708,17 @@ function rResumo() {
         <div class="alert ${acima > 0 ? 'bad' : 'ok'}" style="margin-top:10px">${acima > 0 ? `<b>${brl(acima)} acima do teto.</b> Nada de parcelar compra nova este mês.` : `Dentro do teto: ainda cabem <b>${brl(-acima)}</b> de parcelas, se for necessário.`}${fim ? ` As parcelas que existem hoje acabam em <b>${nomeMes(fim)}</b>.` : ''}</div>
         ${it.length ? `<details style="margin-top:8px"><summary class="small muted" style="cursor:pointer">Ver as ${it.length} parcelas</summary><table style="width:100%;font-size:13px;margin-top:6px;font-variant-numeric:tabular-nums">${it.map(i => `<tr><td>${esc(i.descricao)} <span class="small muted">${esc(i.onde)}</span></td><td class="small muted">${esc(i.parcela || '')}</td><td style="text-align:right">${brl(i.valor)}</td></tr>`).join('')}</table></details>` : ''}
       </div>`; })()}
+    ${db.cartoes.length ? (() => {
+      const cs = cartoesDoMes(mes), tot = r2(soma(cs)), teto = tetoCartoes(), pct = Math.min(100, tot / teto * 100), acima = r2(tot - teto);
+      const abertas = cs.filter(c => c.aberta).map(c => c.nome), aqui = cs.filter(c => c.hojeVai === mes).map(c => c.nome);
+      return `<h2>Total dos cartões</h2>
+      <div class="card">
+        <div class="linha" style="padding-bottom:8px"><span>Faturas que vencem em ${nomeMes(mes)} <span class="small">(tudo: parcelas, à vista e juros)</span></span><b class="${acima > 0 ? 'neg' : 'pos'}">${brl(tot)} <span class="small muted" style="font-weight:400">de ${brl(teto)}</span></b></div>
+        <div class="bar ${acima > 0 ? 'bad' : pct > 85 ? 'warn' : ''}"><i style="width:${pct}%"></i></div>
+        <div class="alert ${acima > 0 ? 'bad' : pct > 85 ? 'warn' : 'ok'}" style="margin-top:10px">${acima > 0 ? `<b>${brl(acima)} acima do teto.</b> ${abertas.length ? 'Até essas faturas fecharem, só débito ou Pix.' : 'Essas faturas já fecharam: segurem as próximas.'}` : `Ainda cabem <b>${brl(-acima)}</b> nos cartões para ${nomeMes(mes)}.`}
+          ${aqui.length ? ` Compras feitas hoje no <b>${aqui.map(esc).join(', ')}</b> entram aqui.` : abertas.length ? '' : ' Todas essas faturas já fecharam.'}</div>
+        <table style="width:100%;font-size:13px;margin-top:8px;font-variant-numeric:tabular-nums">${cs.map(c => `<tr><td>${esc(c.nome)} <span class="small muted">${c.aberta ? 'aberta' : 'fechada'}</span></td><td style="text-align:right">${brl(c.valor)}</td></tr>`).join('')}</table>
+      </div>`; })() : ''}
     <h2>Cada um</h2>
     <div class="grid two">${PESSOAS.map(cardPessoa).join('')}</div>
 
@@ -872,6 +886,10 @@ function rConfig() {
         <p>Quanto, no máximo, pode ir para parcelas por mês (compras parceladas e empréstimos; o carro não entra). Uma regra comum é <b>10% do que entra</b>.</p>
         <div class="field"><label for="cfgTeto">Teto por mês (R$)</label><input id="cfgTeto" inputmode="decimal" value="${valorTxt(tetoParcelas())}"></div>
       </div>
+      <div class="card"><h2>Teto dos cartões</h2>
+        <p>Quanto, no máximo, podem somar <b>todas as faturas</b> que vencem no mês (parcelas, compras à vista e juros). Passou disso, só débito ou Pix até a fatura virar.</p>
+        <div class="field"><label for="cfgTetoCart">Teto por mês (R$)</label><input id="cfgTetoCart" inputmode="decimal" value="${valorTxt(tetoCartoes())}"></div>
+      </div>
       <div class="card"><h2>Gasto do dia a dia</h2>
         <p>Mercado, padaria, posto, lanches… Nos meses que ainda não fecharam, o app soma uma <b>previsão</b> desse gasto nas saídas, para o saldo não parecer maior do que vai ser. Conforme vocês lançam as compras, a previsão diminui.</p>
         <div class="field"><select id="cfgDia">
@@ -912,6 +930,7 @@ function rConfig() {
     </div>`;
   [0, 1].forEach(i => $('#cfgNome' + i).onchange = e => { if (renomearPessoa(i, e.target.value)) { salvar(); toast('Nome atualizado em todos os lançamentos'); } else e.target.value = PESSOAS[i]; });
   $('#cfgTeto').onchange = e => { const v = lerValor(e.target.value); if (isNaN(v) || v <= 0) return toast('Valor inválido'); db.tetoParcelas = v; salvar(); toast('Teto de parcelas: ' + brl(v)); };
+  $('#cfgTetoCart').onchange = e => { const v = lerValor(e.target.value); if (isNaN(v) || v <= 0) return toast('Valor inválido'); db.tetoCartoes = v; salvar(); toast('Teto dos cartões: ' + brl(v)); };
   $('#cfgDia').onchange = e => { const v = e.target.value; db.diaADia = v === 'fixo' ? (mediaDiaADia() || 3000) : v === 'nao' ? 'nao' : null; salvar(); toast('Previsão do dia a dia atualizada'); };
   if ($('#cfgDiaValor')) $('#cfgDiaValor').onchange = e => { const v = lerValor(e.target.value); if (isNaN(v) || v <= 0) return toast('Valor inválido'); db.diaADia = v; salvar(); toast('Previsão: ' + brl(v) + ' por mês'); };
   $('#cfgDivisao').onchange = e => { db.divisao = e.target.value; salvar(); toast('Divisão atualizada'); };
