@@ -233,6 +233,15 @@ label.sem-l{cursor:pointer}
 .sem-g{background:var(--surface-2);border-radius:10px;padding:8px 10px}
 .sem-aviso{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:7px 10px;font-weight:600;font-size:14px}
 .sem-aviso.neg{background:var(--danger-soft);color:var(--danger)}
+.sem-comp{display:grid;gap:5px;padding:2px 2px 0}
+.sem-cat{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(40px,1fr) auto;gap:8px;align-items:center;font-size:14px}
+.sem-cat small{color:var(--muted)}
+.sem-cbar{height:7px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.sem-cbar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.sem-cat b{font-variant-numeric:tabular-nums;font-size:14px}
+.sem-comp summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14px;margin-top:2px}
+.sem-it{display:flex;gap:6px;align-items:baseline;font-size:14px;padding:3px 0;border-bottom:1px solid var(--line)}
+.sem-it:last-child{border-bottom:0}
 </style>
 </head>
 <body>
@@ -847,6 +856,16 @@ function semanasDoMes(ym) {
 const curtoBR = s => `${s.slice(8)}/${s.slice(5, 7)}`;
 // "EMPRÉSTIMO NUBANK (R$ 9 MIL)" → "Empréstimo Nubank"
 const nomeBonito = n => String(n).replace(/\s*\(.*\)\s*$/, '').toLowerCase().replace(/(^|\s)(\S)/g, (_, a, b) => a + b.toUpperCase());
+// para onde foi o dia a dia da semana: por tipo (categoria lançada ou, se "Outros", pelo nome da loja) e a lista dos gastos
+const NOME_TIPO = { 'Mercado': '🛒 Mercado', 'Alimentação fora': '🍔 Lanche e restaurante', 'Transporte': '⛽ Gasolina e transporte', 'Saúde': '💊 Farmácia e saúde', 'Pets': '🐾 Pet', 'Lazer': '🎉 Lazer', 'Compras': '🛍️ Compras', 'Contas da casa': '🏠 Casa', 'Outros': '📦 Outros' };
+const tipoDoGasto = x => { const c = x.categoria && x.categoria !== 'Outros' ? x.categoria : categoriaPorNome(x.descricao || ''); return c === 'Juros e tarifas' ? 'Outros' : c; };
+function composicaoSemana(itens) {
+  const grupos = {};
+  for (const x of itens) { const t = tipoDoGasto(x); (grupos[t] ||= { total: 0, itens: [] }); grupos[t].total += Number(x.valor); grupos[t].itens.push(x); }
+  const arr = Object.entries(grupos).sort((a, b) => b[1].total - a[1].total), max = arr[0][1].total || 1;
+  return `<div class="sem-comp">${arr.map(([t, g]) => `<div class="sem-cat"><span>${esc(NOME_TIPO[t] || t)}<small> · ${g.itens.length}</small></span><span class="sem-cbar"><i style="width:${g.total / max * 100}%"></i></span><b>${brl(r2(g.total))}</b></div>`).join('')}
+    <details><summary>Ver os ${itens.length} gasto${itens.length > 1 ? 's' : ''}</summary>${itens.map(x => `<div class="sem-it"><span class="sem-d">${curtoBR(x.data)}</span><span class="sem-t">${esc(x.descricao)} <small class="muted">${esc((NOME_TIPO[tipoDoGasto(x)] || '').replace(/^\S+\s/, ''))} · ${esc(x.cartaoId ? nomeForma(x.cartaoId) : nomeForma(x.forma))}</small></span><span class="sem-v">${brl(x.valor)}</span></div>`).join('')}</details></div>`;
+}
 function cartaoSemana(s, hoje) {
   const agora = hoje >= s.ini && hoje <= s.fim, passou = s.fim < hoje, comecou = s.ini <= hoje;
   const conta = c => `<label class="sem-l ${c.pago ? 'ok' : ''}"><input type="checkbox" class="chk" data-pagar="${c.chave}" data-mes="${c.ym}" ${c.pago ? 'checked' : ''}><span class="sem-t"><span class="sem-d">${curtoBR(c.data)}</span>${esc(c.nome)}</span><span class="sem-v">${brl(c.valor)}</span></label>`;
@@ -859,6 +878,7 @@ function cartaoSemana(s, hoje) {
   if (s.entra.length) h += `<div class="sem-b"><span class="sem-rot">Entra</span>${s.entra.map(r => `<div class="sem-l ${r.status !== 'previsto' ? 'ok' : ''}"><span class="sem-ic">${r.status !== 'previsto' ? '✓' : '○'}</span><span class="sem-t"><span class="sem-d">${curtoBR(r.data)}</span>${esc(r.descricao || r.tipo)}</span><span class="sem-v pos">${brl(paraCasa(r))}</span></div>`).join('')}</div>`;
   if (s.pagar.length) h += `<div class="sem-b"><span class="sem-rot">Pagar</span>${s.pagar.map(conta).join('')}</div>`;
   h += `<div class="sem-g">🛒 ${comecou ? `Dia a dia: <b class="${resta < 0 ? 'neg' : ''}">${brl(s.gasto.total)}</b> de ${brl(s.limite)}${resta < 0 ? ` · <b class="neg">passou ${brl(-resta)}</b>` : passou ? '' : ` · ainda cabem <b>${brl(resta)}</b>`}<span class="bar ${resta < 0 ? 'bad' : pct > 85 ? 'warn' : ''}" style="display:block;margin-top:6px"><i style="width:${pct}%"></i></span>` : `Pode gastar <b>${brl(s.limite)}</b> no dia a dia${caixa}`}</div>`;
+  if (comecou && s.gasto.itens.length) h += composicaoSemana(s.gasto.itens);
   if (s.gasto.parceladas.length) h += `<div class="sem-aviso neg">⚠️ Compra parcelada nova: ${s.gasto.parceladas.map(x => `${esc(x.descricao)} (${x.parcelas}x)`).join(', ')}</div>`;
   const tarefas = [...s.fazer, { html: 'Lançar no app os gastos da semana (Pix e cartão)', feito: passou, botao: '' }];
   h += `<div class="sem-b"><span class="sem-rot">Fazer</span>${tarefas.map(t => `<div class="sem-l ${t.feito ? 'ok' : ''}"><span class="sem-ic">${t.feito ? '✓' : '○'}</span><span class="sem-t">${t.html}</span>${t.botao}</div>`).join('')}</div>`;
