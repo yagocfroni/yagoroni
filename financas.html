@@ -216,6 +216,7 @@ dialog h3{margin:0 0 14px;font-size:18px}
     </div>
     <nav class="tabs" role="tablist">
       <button class="tab" data-tab="resumo" aria-selected="true">Resumo</button>
+      <button class="tab" data-tab="semana">Semana</button>
       <button class="tab" data-tab="entradas">Entradas</button>
       <button class="tab" data-tab="gastos">Gastos do mês</button>
       <button class="tab" data-tab="fixos">Gastos fixos</button>
@@ -227,6 +228,7 @@ dialog h3{margin:0 0 14px;font-size:18px}
 
 <main class="wrap">
   <section id="resumo" class="on"></section>
+  <section id="semana"></section>
   <section id="entradas"></section>
   <section id="gastos"></section>
   <section id="fixos"></section>
@@ -758,12 +760,77 @@ function render() {
   const nm = nomeMes(mes); $('#mesLabel').textContent = nm[0].toUpperCase() + nm.slice(1);
   document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === aba));
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === aba));
-  const grupo = ['entradas', 'fixos', 'config', 'mais'].includes(aba) ? 'mais' : aba;
+  const grupo = ['entradas', 'fixos', 'config', 'mais'].includes(aba) ? 'mais' : aba === 'semana' ? 'resumo' : aba;
   document.querySelectorAll('.bnav [data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === grupo));
-  ({ resumo: rResumo, entradas: rEntradas, gastos: rGastos, fixos: rFixos, cartoes: rCartoes, config: rConfig, mais: rMais })[aba]();
+  ({ resumo: rResumo, semana: rSemana, entradas: rEntradas, gastos: rGastos, fixos: rFixos, cartoes: rCartoes, config: rConfig, mais: rMais })[aba]();
+}
+/* ============ Semana: o que entra, o que pagar, quanto pode gastar e o que fazer (segunda a domingo) ============ */
+const isoDe = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dataDe = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const somaDias = (s, n) => { const d = dataDe(s); d.setDate(d.getDate() + n); return isoDe(d); };
+const segundaDe = s => { const d = dataDe(s); return somaDias(s, -((d.getDay() + 6) % 7)); };
+let semanaIni = null;
+// limite da semana = meta do dia a dia do mês × 12 / 52 (R$ 3.100 → R$ 715)
+const limiteSemana = () => Math.round(baseDiaADia() * 12 / 52);
+// gasto do dia a dia feito na semana (pela data da compra): Pix/débito + compras à vista no cartão; caixinhas e juros ficam fora
+function gastoDaSemana(ini, fim) {
+  const dentro = x => x.data >= ini && x.data <= fim && !x.caixinha && x.categoria !== 'Juros e tarifas';
+  const itens = [...db.gastos.filter(dentro), ...db.compras.filter(x => dentro(x) && !x.ajusteBanco && !(Number(x.parcelas) > 1))];
+  return { total: r2(soma(itens)), itens: itens.sort((a, b) => a.data.localeCompare(b.data)), parceladas: db.compras.filter(x => x.data >= ini && x.data <= fim && Number(x.parcelas) > 1) };
+}
+function semanaDados(ini) {
+  const fim = somaDias(ini, 6), dias = [...Array(7)].map((_, k) => somaDias(ini, k)), meses = [...new Set(dias.map(ymDe))];
+  const pagar = [], entra = [], avisos = [], fazer = [];
+  for (const ym of meses) {
+    const ult = new Date(+ym.slice(0, 4), +ym.slice(5), 0).getDate();
+    for (const c of contasDoMes(ym)) { const d = `${ym}-${pad(Math.min(c.dia, ult))}`; if (d >= ini && d <= fim) pagar.push({ ...c, data: d, ym }); }
+    for (const r of entradasDoMes(ym)) if (r.data >= ini && r.data <= fim) entra.push(r);
+    for (const c of db.cartoes) { const v = virada(c, ym), d = `${ym}-${pad(Math.min(v, ult))}`; if (d >= ini && d <= fim) { const prox = mesPrimeiraParcela({ data: d }, c); avisos.push(`${c.nome} vira em ${dataBR(d)}: compras a partir desse dia vencem em ${pad(Math.min(Number(c.vencimento), 28))}/${prox.slice(5)}.`); } }
+    for (const f of fixosAtivos(ym).filter(f => f.emprestimo)) { const d = `${ym}-${pad(Math.min(f.dia, ult))}`;
+      if (d >= ini && d <= fim && ym >= (f.emprestimo.amortizarDesde || f.inicio)) { const feito = (f.emprestimo.amortizacoes || []).some(a => ymDe(a.data) === ym);
+        fazer.push({ html: `Depois da parcela, antecipar <b>${brl(Number(f.emprestimo.sugestao) || 0)}</b> em ${esc(f.nome)} (últimas parcelas)`, feito, botao: feito ? '' : `<button class="btn small" data-amortizar="${f.id}">Registrar</button>` }); } }
+    for (const m of db.metas || []) { const d = `${ym}-10`; if (m.mensal > 0 && ym >= (m.desde || '0000') && d >= ini && d <= fim && guardadoMeta(m) < Number(m.alvo)) { const feito = (m.depositos || []).some(x => ymDe(x.data) === ym && x.valor > 0);
+      fazer.push({ html: `Guardar <b>${brl(Number(m.mensal))}</b> em ${esc(m.nome)}`, feito, botao: feito ? '' : `<button class="btn small" data-guardar="${m.id}">Guardar</button>` }); } }
+  }
+  // contas do mês que já venceram e não foram marcadas como pagas (só na semana de hoje)
+  const hoje = hojeISO(), atrasadas = [];
+  if (hoje >= ini && hoje <= fim) for (const c of contasDoMes(ymDe(hoje))) { const d = `${ymDe(hoje)}-${pad(c.dia)}`; if (d < ini && !c.pago) atrasadas.push({ ...c, data: d, ym: ymDe(hoje) }); }
+  const caixinhas = (db.caixinhas || []).filter(k => meses.includes(k.mes)).map(k => ({ ...k, resto: r2(Number(k.valor) - gastoCaixinha(k.id)) }));
+  return { ini, fim, pagar: pagar.sort((a, b) => a.data.localeCompare(b.data)), entra: entra.sort((a, b) => a.data.localeCompare(b.data)), avisos, fazer, atrasadas, caixinhas, gasto: gastoDaSemana(ini, fim), limite: limiteSemana() };
+}
+function htmlGastoSemana(s) {
+  const pct = s.limite > 0 ? Math.min(100, s.gasto.total / s.limite * 100) : 0, resta = r2(s.limite - s.gasto.total);
+  return `<div class="linha" style="padding-bottom:8px"><span>Dia a dia nesta semana</span><b class="${resta < 0 ? 'neg' : 'pos'}">${brl(s.gasto.total)} <span class="small muted" style="font-weight:400">de ${brl(s.limite)}</span></b></div>
+    <div class="bar ${resta < 0 ? 'bad' : pct > 85 ? 'warn' : ''}"><i style="width:${pct}%"></i></div>
+    <p class="small ${resta < 0 ? 'neg' : 'muted'}" style="margin:8px 0 0">${resta < 0 ? `<b>Passou ${brl(-resta)}</b>: a próxima semana fica menor.` : `Ainda cabem <b>${brl(resta)}</b> até domingo.`} Conta tudo que foi lançado com data desta semana (Pix, débito e cartão à vista).</p>
+    ${s.gasto.parceladas.length ? `<div class="alert bad" style="margin-top:8px">⚠️ Compra parcelada nova nesta semana: ${s.gasto.parceladas.map(x => `${esc(x.descricao)} (${x.parcelas}x)`).join(', ')}.</div>` : ''}`;
+}
+function rSemana() {
+  const hoje = hojeISO();
+  // trocou o mês lá em cima: vai para a semana de hoje (mês atual) ou a 1ª semana do mês
+  if (!semanaIni || ymDe(somaDias(semanaIni, 3)) !== mes) semanaIni = segundaDe(mes === hojeYM() ? hoje : mes + '-04');
+  const s = semanaDados(semanaIni), agora = hoje >= s.ini && hoje <= s.fim;
+  const linhaConta = c => `<div class="item conta ${c.pago ? 'done' : ''}"><input type="checkbox" class="chk" data-pagar="${c.chave}" data-mes="${c.ym}" ${c.pago ? 'checked' : ''} aria-label="Marcar ${esc(c.nome)} como pago">
+    <div class="dia"><b>${c.data.slice(8)}</b><span>${nomeMes(c.ym, true)}</span></div><div class="main"><div class="t">${esc(c.nome)}</div><div class="s">${tag(c.pessoa)} <span>${esc(c.info)}</span></div></div><div class="v">${brl(c.valor)}</div></div>`;
+  $('#semana').innerHTML = `
+    <div class="row-head" style="margin-top:4px"><button class="btn" data-semana="-7" aria-label="Semana anterior">‹</button>
+      <h2 style="margin:0;text-align:center">${dataBR(s.ini)} a ${dataBR(s.fim)}${agora ? '<br><span class="small muted" style="font-weight:500">esta semana</span>' : ''}</h2>
+      <button class="btn" data-semana="7" aria-label="Próxima semana">›</button></div>
+    ${agora ? '' : '<div style="display:flex;justify-content:center;margin-bottom:8px"><button class="btn small" data-semana="0">Voltar para esta semana</button></div>'}
+    <div class="card">${htmlGastoSemana(s)}</div>
+    ${s.avisos.map(a => `<div class="alert warn" style="margin-top:10px">${esc(a)}</div>`).join('')}
+    ${s.caixinhas.map(k => `<div class="alert ok" style="margin-top:10px">Caixinha <b>${esc(k.nome)}</b>: ${k.resto >= 0 ? `ainda tem <b>${brl(k.resto)}</b>` : `passou <b>${brl(-k.resto)}</b>`}.</div>`).join('')}
+    ${s.atrasadas.length ? `<h2>Venceram e não estão marcadas como pagas</h2><div class="list">${s.atrasadas.map(linhaConta).join('')}</div>` : ''}
+    <h2>Pagar nesta semana</h2>
+    <div class="list">${s.pagar.length ? s.pagar.map(linhaConta).join('') : '<div class="empty">Nenhuma conta vence nesta semana.</div>'}</div>
+    <h2>Entra nesta semana</h2>
+    <div class="list">${s.entra.length ? s.entra.map(r => `<div class="item"><div class="dia"><b>${r.data.slice(8)}</b><span>${nomeMes(ymDe(r.data), true)}</span></div><div class="main"><div class="t">${esc(r.descricao || r.tipo)}</div><div class="s">${tag(r.pessoa)} ${r.status === 'previsto' ? '<span class="st logo">a receber</span>' : '<span class="st pago">recebido</span>'}</div></div><div class="v pos">${brl(paraCasa(r))}</div></div>`).join('') : '<div class="empty">Nada previsto para entrar nesta semana.</div>'}</div>
+    <h2>Fazer</h2>
+    <div class="list">${[...s.fazer, { html: 'Lançar no app os gastos da semana (Pix, débito e cartão)', feito: false, botao: '' }, { html: 'Domingo: olhar a barra do dia a dia e o "Total dos cartões" no Resumo', feito: false, botao: '' }].map(t => `<div class="item ${t.feito ? 'done' : ''}"><span style="font-size:18px">${t.feito ? '✅' : '◻️'}</span><div class="main"><div class="t" style="font-weight:500">${t.html}</div></div>${t.botao}</div>`).join('')}</div>
+    ${s.gasto.itens.length ? `<h2>Gastos lançados nesta semana</h2><div class="list">${s.gasto.itens.map(x => `<div class="item"><div class="main"><div class="t">${esc(x.descricao)}</div><div class="s">${dataBR(x.data)} · ${esc(x.cartaoId ? nomeForma(x.cartaoId) : nomeForma(x.forma))}</div></div><div class="v">${brl(x.valor)}</div></div>`).join('')}</div>` : ''}`;
 }
 function rMais() {
-  const opc = [['entradas', 'entradas', 'Entradas', 'Salários, clientes e o que vai para a casa'], ['fixos', 'fixos', 'Gastos fixos', 'Aluguel, contas, financiamentos'],
+  const opc = [['semana', 'cal', 'Semana', 'O que pagar, o que entra e quanto ainda pode gastar nesta semana'], ['entradas', 'entradas', 'Entradas', 'Salários, clientes e o que vai para a casa'], ['fixos', 'fixos', 'Gastos fixos', 'Aluguel, contas, financiamentos'],
     ['config', 'ajustes', 'Ajustes', 'Nomes, divisão do casal, backup e importações']];
   $('#mais').innerHTML = `<h2 style="margin-top:4px">Mais</h2><div class="list mais-list">${opc.map(([t, i, n, d]) => `
     <div class="item" data-tab="${t}">${ic(i)}<div class="main"><div class="t">${n}</div><div class="s">${d}</div></div><span class="muted">›</span></div>`).join('')}
@@ -825,6 +892,7 @@ function rResumo() {
     return `<div><span>${nomeMes(m, true)}</span><b>${brl(sai)}</b>${ent ? `<small class="${sobra < 0 ? 'neg' : 'pos'}" style="display:block;font-size:11.5px">${sobra < 0 ? 'faltam' : 'sobram'} ${brl(Math.abs(sobra))}</small>` : ''}<small class="${acum < 0 ? 'neg' : 'pos'}" style="display:block;font-size:11.5px;font-weight:700">acumulado ${acum < 0 ? '−' : ''}${brl(Math.abs(acum))}</small></div>`; }).join('');
 
   $('#resumo').innerHTML = `
+    ${mes === hojeYM() ? `<div class="card" style="margin-bottom:14px">${htmlGastoSemana(semanaDados(segundaDe(hojeISO())))}<div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn small primary" data-semana="0">Ver a semana: contas e tarefas</button></div></div>` : ''}
     <div class="grid kpis">
       <div class="card kpi"><div class="lbl"><span class="ico pos">${ic('entra')}</span>Entradas</div><div class="val">${brl(recebido + aReceber)}</div><div class="sub"><span class="pos">${brl(recebido)}</span> recebido${aReceber ? `<br><span class="warn-t">${brl(aReceber)}</span> a receber` : ''}</div></div>
       <div class="card kpi"><div class="lbl"><span class="ico neg">${ic('sai')}</span>Saídas</div><div class="val">${brl(totSaidas)}</div><div class="sub">${brl(aPagar)} ainda a pagar${previsaoDiaADia(mes) > 0 ? `<br><span class="warn-t">${brl(previsaoDiaADia(mes))}</span> previsão do dia a dia (ainda não gasto)` : ''}</div></div>
@@ -1722,8 +1790,14 @@ document.addEventListener('drop', async e => {
 });
 
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-tab],[data-acao],[data-editar],[data-excluir],[data-encerrar],[data-ajustar],[data-virada],[data-visao],[data-guardar],[data-amortizar],[data-conferir]');
+  const t = e.target.closest('[data-tab],[data-acao],[data-editar],[data-excluir],[data-encerrar],[data-ajustar],[data-virada],[data-visao],[data-guardar],[data-amortizar],[data-conferir],[data-semana]');
   if (!t) return;
+  if (t.dataset.semana != null) {
+    const n = Number(t.dataset.semana), base = segundaDe(hojeISO());
+    semanaIni = n === 0 ? base : somaDias(semanaIni || base, n);
+    if (ymDe(somaDias(semanaIni, 3)) !== mes) mes = ymDe(somaDias(semanaIni, 3));
+    aba = 'semana'; render(); window.scrollTo({ top: 0 }); return;
+  }
   const dataDoMes = () => mes === hojeYM() ? hojeISO() : mes + '-10';
   const lerComSinal = r => { const neg = /^\s*-/.test(r); const v = lerValor(String(r).replace('-', '')); return neg ? -v : v; };
   if (t.dataset.guardar) {
@@ -1802,7 +1876,7 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.dataset.pagar) { (db.pagos[mes] ||= {})[t.dataset.pagar] = t.checked; if (!t.checked) delete db.pagos[mes][t.dataset.pagar]; salvar(); }
+  if (t.dataset.pagar) { const m = t.dataset.mes || mes; (db.pagos[m] ||= {})[t.dataset.pagar] = t.checked; if (!t.checked) delete db.pagos[m][t.dataset.pagar]; salvar(); }
   if (t.dataset.receber) { const r = t.dataset.receber.startsWith('rf_') ? materializar(t.dataset.receber) : db.receitas.find(x => x.id === t.dataset.receber); if (r) { r.status = t.checked ? 'recebido' : 'previsto'; salvar(); } }
 });
 $('#prev').onclick = () => { mes = addM(mes, -1); render(); };
