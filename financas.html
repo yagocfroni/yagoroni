@@ -200,6 +200,39 @@ dialog h3{margin:0 0 14px;font-size:18px}
 .proj div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
 .proj b{display:block;font-variant-numeric:tabular-nums;font-size:14px}
 .proj span{font-size:12px;color:var(--muted);text-transform:capitalize}
+/* tela Semana (no estilo do plano semana a semana) */
+.sem-regras{background:var(--accent-soft);border-radius:14px;padding:12px 16px;margin:4px 0 14px}
+.sem-regras summary{cursor:pointer;font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.sem-regras ol{margin:8px 0 2px;padding-left:20px;display:grid;gap:3px}
+.sem-mes{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:2px solid var(--text);padding-bottom:6px;margin-bottom:10px}
+.sem-mes h2{margin:0}
+.sem-nums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;font-variant-numeric:tabular-nums;margin-bottom:12px}
+.sem-nums div{background:var(--surface-2);border-radius:10px;padding:8px 10px;min-width:0}
+.sem-nums span{display:block;font-size:11.5px;color:var(--muted)}
+.sem-nums b{font-size:15px}
+@media (max-width:560px){.sem-nums{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sem-lista{display:flex;flex-direction:column;gap:10px}
+.sem{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;scroll-margin-top:90px}
+.sem.agora{border:2px solid var(--accent)}
+.sem.passou{opacity:.75}
+.sem-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sem-h b{font:700 16px var(--display)}
+.sem-chip{font-size:11.5px;font-weight:600;border-radius:999px;padding:3px 9px;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.sem-chip.on{background:var(--accent);color:var(--surface)}
+.sem-b{display:grid;gap:4px}
+.sem-rot{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.sem-l{display:flex;gap:9px;align-items:center;justify-content:space-between;cursor:default}
+label.sem-l{cursor:pointer}
+.sem-l .chk{width:19px;height:19px;flex:none;margin:0}
+.sem-ic{width:19px;text-align:center;flex:none;color:var(--muted);font-weight:700}
+.sem-t{flex:1;min-width:0}
+.sem-d{color:var(--muted);font-variant-numeric:tabular-nums;margin-right:6px}
+.sem-v{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}
+.sem-l.ok .sem-t{color:var(--muted);text-decoration:line-through}
+.sem-l.ok .sem-ic{color:var(--pos)}
+.sem-g{background:var(--surface-2);border-radius:10px;padding:8px 10px}
+.sem-aviso{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:7px 10px;font-weight:600;font-size:14px}
+.sem-aviso.neg{background:var(--danger-soft);color:var(--danger)}
 </style>
 </head>
 <body>
@@ -788,7 +821,7 @@ function semanaDados(ini) {
     for (const c of db.cartoes) { const v = virada(c, ym), d = `${ym}-${pad(Math.min(v, ult))}`; if (d >= ini && d <= fim) { const prox = mesPrimeiraParcela({ data: d }, c); avisos.push(`${c.nome} vira em ${dataBR(d)}: compras a partir desse dia vencem em ${pad(Math.min(Number(c.vencimento), 28))}/${prox.slice(5)}.`); } }
     for (const f of fixosAtivos(ym).filter(f => f.emprestimo)) { const d = `${ym}-${pad(Math.min(f.dia, ult))}`;
       if (d >= ini && d <= fim && ym >= (f.emprestimo.amortizarDesde || f.inicio)) { const feito = (f.emprestimo.amortizacoes || []).some(a => ymDe(a.data) === ym);
-        fazer.push({ html: `Depois da parcela, antecipar <b>${brl(Number(f.emprestimo.sugestao) || 0)}</b> em ${esc(f.nome)} (últimas parcelas)`, feito, botao: feito ? '' : `<button class="btn small" data-amortizar="${f.id}">Registrar</button>` }); } }
+        fazer.push({ html: `Depois da parcela, antecipar <b>${brl(Number(f.emprestimo.sugestao) || 0)}</b> no ${esc(nomeBonito(f.nome))} (últimas parcelas)`, feito, botao: feito ? '' : `<button class="btn small" data-amortizar="${f.id}">Registrar</button>` }); } }
     for (const m of db.metas || []) { const d = `${ym}-10`; if (m.mensal > 0 && ym >= (m.desde || '0000') && d >= ini && d <= fim && guardadoMeta(m) < Number(m.alvo)) { const feito = (m.depositos || []).some(x => ymDe(x.data) === ym && x.valor > 0);
       fazer.push({ html: `Guardar <b>${brl(Number(m.mensal))}</b> em ${esc(m.nome)}`, feito, botao: feito ? '' : `<button class="btn small" data-guardar="${m.id}">Guardar</button>` }); } }
   }
@@ -805,29 +838,49 @@ function htmlGastoSemana(s) {
     <p class="small ${resta < 0 ? 'neg' : 'muted'}" style="margin:8px 0 0">${resta < 0 ? `<b>Passou ${brl(-resta)}</b>: a próxima semana fica menor.` : `Ainda cabem <b>${brl(resta)}</b> até domingo.`} Conta tudo que foi lançado com data desta semana (Pix, débito e cartão à vista).</p>
     ${s.gasto.parceladas.length ? `<div class="alert bad" style="margin-top:8px">⚠️ Compra parcelada nova nesta semana: ${s.gasto.parceladas.map(x => `${esc(x.descricao)} (${x.parcelas}x)`).join(', ')}.</div>` : ''}`;
 }
+// semanas do mês: de segunda a domingo, contando a semana no mês em que cai a quinta-feira
+function semanasDoMes(ym) {
+  let s = segundaDe(ym + '-01'); if (ymDe(somaDias(s, 3)) !== ym) s = somaDias(s, 7);
+  const out = []; while (ymDe(somaDias(s, 3)) === ym) { out.push(s); s = somaDias(s, 7); }
+  return out;
+}
+const curtoBR = s => `${s.slice(8)}/${s.slice(5, 7)}`;
+// "EMPRÉSTIMO NUBANK (R$ 9 MIL)" → "Empréstimo Nubank"
+const nomeBonito = n => String(n).replace(/\s*\(.*\)\s*$/, '').toLowerCase().replace(/(^|\s)(\S)/g, (_, a, b) => a + b.toUpperCase());
+function cartaoSemana(s, hoje) {
+  const agora = hoje >= s.ini && hoje <= s.fim, passou = s.fim < hoje, comecou = s.ini <= hoje;
+  const conta = c => `<label class="sem-l ${c.pago ? 'ok' : ''}"><input type="checkbox" class="chk" data-pagar="${c.chave}" data-mes="${c.ym}" ${c.pago ? 'checked' : ''}><span class="sem-t"><span class="sem-d">${curtoBR(c.data)}</span>${esc(c.nome)}</span><span class="sem-v">${brl(c.valor)}</span></label>`;
+  const resta = r2(s.limite - s.gasto.total), pct = s.limite > 0 ? Math.min(100, s.gasto.total / s.limite * 100) : 0;
+  const caixa = s.caixinhas.filter(k => k.resto > 0).map(k => ` + ${esc(k.nome)} sai da caixinha (ainda tem ${brl(k.resto)})`).join('');
+  let h = `<article class="sem ${agora ? 'agora' : ''} ${passou ? 'passou' : ''}" ${agora ? 'id="semAgora"' : ''}>
+    <div class="sem-h"><b>${curtoBR(s.ini)} a ${curtoBR(s.fim)}</b>${agora ? '<span class="sem-chip on">esta semana</span>' : passou ? '<span class="sem-chip">passou</span>' : ''}</div>`;
+  h += s.avisos.map(a => `<div class="sem-aviso">${esc(a)}</div>`).join('');
+  if (s.atrasadas.length) h += `<div class="sem-b"><span class="sem-rot neg">Venceram e não estão pagas</span>${s.atrasadas.map(conta).join('')}</div>`;
+  if (s.entra.length) h += `<div class="sem-b"><span class="sem-rot">Entra</span>${s.entra.map(r => `<div class="sem-l ${r.status !== 'previsto' ? 'ok' : ''}"><span class="sem-ic">${r.status !== 'previsto' ? '✓' : '○'}</span><span class="sem-t"><span class="sem-d">${curtoBR(r.data)}</span>${esc(r.descricao || r.tipo)}</span><span class="sem-v pos">${brl(paraCasa(r))}</span></div>`).join('')}</div>`;
+  if (s.pagar.length) h += `<div class="sem-b"><span class="sem-rot">Pagar</span>${s.pagar.map(conta).join('')}</div>`;
+  h += `<div class="sem-g">🛒 ${comecou ? `Dia a dia: <b class="${resta < 0 ? 'neg' : ''}">${brl(s.gasto.total)}</b> de ${brl(s.limite)}${resta < 0 ? ` · <b class="neg">passou ${brl(-resta)}</b>` : passou ? '' : ` · ainda cabem <b>${brl(resta)}</b>`}<span class="bar ${resta < 0 ? 'bad' : pct > 85 ? 'warn' : ''}" style="display:block;margin-top:6px"><i style="width:${pct}%"></i></span>` : `Pode gastar <b>${brl(s.limite)}</b> no dia a dia${caixa}`}</div>`;
+  if (s.gasto.parceladas.length) h += `<div class="sem-aviso neg">⚠️ Compra parcelada nova: ${s.gasto.parceladas.map(x => `${esc(x.descricao)} (${x.parcelas}x)`).join(', ')}</div>`;
+  const tarefas = [...s.fazer, { html: 'Lançar no app os gastos da semana (Pix e cartão)', feito: passou, botao: '' }];
+  h += `<div class="sem-b"><span class="sem-rot">Fazer</span>${tarefas.map(t => `<div class="sem-l ${t.feito ? 'ok' : ''}"><span class="sem-ic">${t.feito ? '✓' : '○'}</span><span class="sem-t">${t.html}</span>${t.botao}</div>`).join('')}</div>`;
+  return h + '</article>';
+}
 function rSemana() {
-  const hoje = hojeISO();
-  // trocou o mês lá em cima: vai para a semana de hoje (mês atual) ou a 1ª semana do mês
-  if (!semanaIni || ymDe(somaDias(semanaIni, 3)) !== mes) semanaIni = segundaDe(mes === hojeYM() ? hoje : mes + '-04');
-  const s = semanaDados(semanaIni), agora = hoje >= s.ini && hoje <= s.fim;
-  const linhaConta = c => `<div class="item conta ${c.pago ? 'done' : ''}"><input type="checkbox" class="chk" data-pagar="${c.chave}" data-mes="${c.ym}" ${c.pago ? 'checked' : ''} aria-label="Marcar ${esc(c.nome)} como pago">
-    <div class="dia"><b>${c.data.slice(8)}</b><span>${nomeMes(c.ym, true)}</span></div><div class="main"><div class="t">${esc(c.nome)}</div><div class="s">${tag(c.pessoa)} <span>${esc(c.info)}</span></div></div><div class="v">${brl(c.valor)}</div></div>`;
+  const hoje = hojeISO(), ent = soma(entradasDoMes(mes)), sai = soma(saidasDoMes(mes)), sobra = r2(ent - sai);
+  const fimConta = mes >= hojeYM() ? acumuladoAte(mes) : null, lim = limiteSemana();
+  const amort = db.fixos.filter(f => f.emprestimo && (!f.fim || f.fim >= mes)).map(f => `<li>A partir de ${nomeMes(f.emprestimo.amortizarDesde || f.inicio).split(' ')[0]}/${(f.emprestimo.amortizarDesde || f.inicio).slice(2, 4)}: <b>antecipar ${brl(Number(f.emprestimo.sugestao) || 0)} por mês</b> no ${esc(nomeBonito(f.nome))}.</li>`).join('');
+  const metas = (db.metas || []).filter(m => m.mensal > 0).map(m => `<li>A partir de ${nomeMes(m.desde || hojeYM()).split(' ')[0]}/${(m.desde || hojeYM()).slice(2, 4)}: <b>guardar ${brl(Number(m.mensal))} por mês</b> em ${esc(m.nome)}.</li>`).join('');
   $('#semana').innerHTML = `
-    <div class="row-head" style="margin-top:4px"><button class="btn" data-semana="-7" aria-label="Semana anterior">‹</button>
-      <h2 style="margin:0;text-align:center">${dataBR(s.ini)} a ${dataBR(s.fim)}${agora ? '<br><span class="small muted" style="font-weight:500">esta semana</span>' : ''}</h2>
-      <button class="btn" data-semana="7" aria-label="Próxima semana">›</button></div>
-    ${agora ? '' : '<div style="display:flex;justify-content:center;margin-bottom:8px"><button class="btn small" data-semana="0">Voltar para esta semana</button></div>'}
-    <div class="card">${htmlGastoSemana(s)}</div>
-    ${s.avisos.map(a => `<div class="alert warn" style="margin-top:10px">${esc(a)}</div>`).join('')}
-    ${s.caixinhas.map(k => `<div class="alert ok" style="margin-top:10px">Caixinha <b>${esc(k.nome)}</b>: ${k.resto >= 0 ? `ainda tem <b>${brl(k.resto)}</b>` : `passou <b>${brl(-k.resto)}</b>`}.</div>`).join('')}
-    ${s.atrasadas.length ? `<h2>Venceram e não estão marcadas como pagas</h2><div class="list">${s.atrasadas.map(linhaConta).join('')}</div>` : ''}
-    <h2>Pagar nesta semana</h2>
-    <div class="list">${s.pagar.length ? s.pagar.map(linhaConta).join('') : '<div class="empty">Nenhuma conta vence nesta semana.</div>'}</div>
-    <h2>Entra nesta semana</h2>
-    <div class="list">${s.entra.length ? s.entra.map(r => `<div class="item"><div class="dia"><b>${r.data.slice(8)}</b><span>${nomeMes(ymDe(r.data), true)}</span></div><div class="main"><div class="t">${esc(r.descricao || r.tipo)}</div><div class="s">${tag(r.pessoa)} ${r.status === 'previsto' ? '<span class="st logo">a receber</span>' : '<span class="st pago">recebido</span>'}</div></div><div class="v pos">${brl(paraCasa(r))}</div></div>`).join('') : '<div class="empty">Nada previsto para entrar nesta semana.</div>'}</div>
-    <h2>Fazer</h2>
-    <div class="list">${[...s.fazer, { html: 'Lançar no app os gastos da semana (Pix, débito e cartão)', feito: false, botao: '' }, { html: 'Domingo: olhar a barra do dia a dia e o "Total dos cartões" no Resumo', feito: false, botao: '' }].map(t => `<div class="item ${t.feito ? 'done' : ''}"><span style="font-size:18px">${t.feito ? '✅' : '◻️'}</span><div class="main"><div class="t" style="font-weight:500">${t.html}</div></div>${t.botao}</div>`).join('')}</div>
-    ${s.gasto.itens.length ? `<h2>Gastos lançados nesta semana</h2><div class="list">${s.gasto.itens.map(x => `<div class="item"><div class="main"><div class="t">${esc(x.descricao)}</div><div class="s">${dataBR(x.data)} · ${esc(x.cartaoId ? nomeForma(x.cartaoId) : nomeForma(x.forma))}</div></div><div class="v">${brl(x.valor)}</div></div>`).join('')}</div>` : ''}`;
+    <details class="sem-regras" ${mes === hojeYM() ? 'open' : ''}><summary>Regras da casa</summary><ol>
+      <li><b>Dia a dia até ${brl(lim)} por semana</b> (mercado, padaria, gasolina, farmácia, lanches).</li>
+      <li><b>Nenhuma compra parcelada nova.</b> No cartão, só à vista, e lançando no app na hora.</li>
+      <li><b>Pagar sempre o total da fatura.</b> Nunca o mínimo, nunca cheque especial.</li>${amort}${metas}</ol></details>
+    <div class="sem-mes"><h2>${nomeMes(mes)[0].toUpperCase() + nomeMes(mes).slice(1)}</h2>${mes === hojeYM() ? '<button class="btn small primary" data-semana="0">Ir para esta semana</button>' : ''}</div>
+    <div class="sem-nums">
+      <div><span>Entra</span><b>${brl(ent)}</b></div><div><span>Sai</span><b>${brl(sai)}</b></div>
+      <div><span>Sobra no mês</span><b class="${sobra < 0 ? 'neg' : 'pos'}">${brl(sobra)}</b></div>
+      <div><span>Na conta no fim</span><b class="${fimConta != null && fimConta < 0 ? 'neg' : 'pos'}">${fimConta != null ? brl(fimConta) : '—'}</b></div></div>
+    <div class="sem-lista">${semanasDoMes(mes).map(ini => cartaoSemana(semanaDados(ini), hoje)).join('')}</div>
+    <p class="small muted" style="margin-top:12px">Use as setas lá em cima para ver outros meses. "Na conta no fim" soma a sobra dos meses anteriores a partir deste mês.</p>`;
 }
 function rMais() {
   const opc = [['semana', 'cal', 'Semana', 'O que pagar, o que entra e quanto ainda pode gastar nesta semana'], ['entradas', 'entradas', 'Entradas', 'Salários, clientes e o que vai para a casa'], ['fixos', 'fixos', 'Gastos fixos', 'Aluguel, contas, financiamentos'],
@@ -1793,10 +1846,9 @@ document.addEventListener('click', async e => {
   const t = e.target.closest('[data-tab],[data-acao],[data-editar],[data-excluir],[data-encerrar],[data-ajustar],[data-virada],[data-visao],[data-guardar],[data-amortizar],[data-conferir],[data-semana]');
   if (!t) return;
   if (t.dataset.semana != null) {
-    const n = Number(t.dataset.semana), base = segundaDe(hojeISO());
-    semanaIni = n === 0 ? base : somaDias(semanaIni || base, n);
-    if (ymDe(somaDias(semanaIni, 3)) !== mes) mes = ymDe(somaDias(semanaIni, 3));
-    aba = 'semana'; render(); window.scrollTo({ top: 0 }); return;
+    // vai para o mês da semana de hoje e rola até o cartão dela
+    mes = ymDe(somaDias(segundaDe(hojeISO()), 3)); aba = 'semana'; render();
+    const el = document.getElementById('semAgora'); if (el) el.scrollIntoView({ block: 'start' }); else window.scrollTo({ top: 0 }); return;
   }
   const dataDoMes = () => mes === hojeYM() ? hojeISO() : mes + '-10';
   const lerComSinal = r => { const neg = /^\s*-/.test(r); const v = lerValor(String(r).replace('-', '')); return neg ? -v : v; };
