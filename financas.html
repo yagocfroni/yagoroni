@@ -261,6 +261,7 @@ dialog h3{margin:0 0 14px;font-size:18px}
 </form></dialog>
 <div id="toast"></div>
 <input type="file" id="importFile" hidden>
+<input type="file" id="importPdf" accept="application/pdf,.pdf" multiple hidden>
 <input type="file" id="importCompras" hidden>
 <input type="file" id="juntarFile" hidden>
 
@@ -273,7 +274,7 @@ let RESP = [...PESSOAS, 'Casal'];
 const CATEGORIAS = ['Moradia', 'Contas da casa', 'Mercado', 'Alimentação fora', 'Transporte', 'Saúde', 'Impostos (DAS/MEI/INSS)', 'Juros e tarifas', 'Trabalho', 'Educação', 'Assinaturas', 'Lazer', 'Compras', 'Pets', 'Outros'];
 const TIPOS_ENTRADA = ['Salário', 'Serviço / Freela', 'Pró-labore', 'Cliente fixo', 'Venda', 'Reembolso', 'Outros'];
 const FORMAS = { pix: 'Pix', boleto: 'Boleto', debito: 'Débito', dinheiro: 'Dinheiro' };
-const VAZIO = () => ({ receitas: [], entradasFixas: [], puladas: {}, fixos: [], cartoes: [], compras: [], gastos: [], caixinhas: [], pagos: {}, ajustes: {}, reserva: 0, divisao: '50', pctA: 50, pessoas: null });
+const VAZIO = () => ({ receitas: [], entradasFixas: [], puladas: {}, fixos: [], cartoes: [], compras: [], gastos: [], caixinhas: [], metas: [], pagos: {}, ajustes: {}, reserva: 0, divisao: '50', pctA: 50, pessoas: null });
 
 let db = carregar();
 let mes = hojeYM();
@@ -316,7 +317,75 @@ function salvar() {
   try { localStorage.setItem(KEY, JSON.stringify(db)); }
   catch (e) { toast('Não consegui salvar neste navegador. Faça um backup em Ajustes.'); }
   gravarArquivo();
+  agendarNuvem();
   render();
+}
+
+/* ============ Sincronizar os celulares do casal ============ */
+// Quando o app abre pelo link privado no claude.ai, uma cópia dos dados fica guardada nesse mesmo link
+// (só quem tem acesso a ele vê). Cada celular manda o que mudou e recebe o que o outro mudou.
+// Fora do claude.ai, ou sem conexão, tudo continua só no aparelho, como antes.
+const NUVEM_DOC = 'casa/estado';
+let nuvem = null, nuvemEstado = 'off', nuvemTimer = null, nuvemEnviando = false, nuvemEdicoes = 0;
+const DISPOSITIVO = (() => { try { let d = localStorage.getItem('financas-disp'); if (!d) { d = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('financas-disp', d); } return d; } catch (e) { return 'tmp' + Math.random().toString(36).slice(2, 8); } })();
+const syncMeta = { get() { try { return JSON.parse(localStorage.getItem('financas-sync') || '{}'); } catch (e) { return {}; } }, set(m) { try { localStorage.setItem('financas-sync', JSON.stringify(m)); } catch (e) {} } };
+function estadoNuvem(e) { nuvemEstado = e; statusArquivo(); }
+async function iniciarNuvem() {
+  if (!window.claude || typeof window.claude.use !== 'function') return;
+  let api = null; try { api = await window.claude.use('db'); } catch (e) {}
+  if (!api) return;
+  nuvem = api.doc(NUVEM_DOC); estadoNuvem('conectando');
+  const espera = setTimeout(() => { if (nuvemEstado === 'conectando') estadoNuvem('sem-rede'); }, 10000);
+  nuvem.onSnapshot(snap => {
+    if (snap.metadata.fromCache && !snap.exists) return;
+    if (!snap.metadata.fromCache) clearTimeout(espera);
+    receberNuvem(snap);
+  }, () => { clearTimeout(espera); estadoNuvem('erro'); });
+}
+function receberNuvem(snap) {
+  const m = syncMeta.get();
+  if (!snap.exists) { if (!snap.metadata.fromCache) enviarNuvem(); return; } // primeira vez: este celular sobe os dados
+  const d = snap.data() || {};
+  if (d.por === DISPOSITIVO) { if (!m.sujo && !nuvemTimer) estadoNuvem('ok'); return; } // é a gravação deste próprio celular
+  if (d.v === m.base) { if (m.sujo) { if (!nuvemTimer && !nuvemEnviando) agendarNuvem(0); } else estadoNuvem('ok'); return; }
+  let remoto; try { remoto = JSON.parse(d.json); } catch (e) { return; }
+  if (!remoto || !Array.isArray(remoto.receitas)) return;
+  const local = db;
+  db = Object.assign(VAZIO(), remoto);
+  if (m.sujo) juntarDados(local); // os dois mexeram: fica o do outro celular + o que só este tinha
+  // se este app tem uma atualização mais nova (do Claude) que a cópia do outro celular, aplica de novo
+  if (window.DADOS_INICIAIS && db.semente !== window.DADOS_INICIAIS.semente) { aplicarSemente(); m.sujo = true; }
+  syncMeta.set({ base: d.v, sujo: !!m.sujo });
+  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) {}
+  prepararPessoas(); render();
+  if (m.sujo) agendarNuvem(0); else estadoNuvem('ok');
+  if (!snap.metadata.fromCache) toast('Atualizado com o outro celular');
+}
+function agendarNuvem(ms = 2500) {
+  if (!nuvem) return;
+  nuvemEdicoes++;
+  const m = syncMeta.get(); if (!m.sujo) syncMeta.set({ ...m, sujo: true });
+  estadoNuvem('pendente');
+  clearTimeout(nuvemTimer); nuvemTimer = setTimeout(enviarNuvem, ms);
+}
+async function enviarNuvem() {
+  nuvemTimer = null;
+  if (!nuvem) return;
+  if (nuvemEnviando) { nuvemTimer = setTimeout(enviarNuvem, 1500); return; }
+  const json = JSON.stringify(db);
+  if (json.length > 240000) return estadoNuvem('grande');
+  nuvemEnviando = true; estadoNuvem('enviando');
+  const v = Date.now(), edicao = nuvemEdicoes;
+  try {
+    await nuvem.set({ v, por: DISPOSITIVO, em: new Date(v).toISOString(), json });
+    const aindaSujo = edicao !== nuvemEdicoes;
+    syncMeta.set({ base: v, sujo: aindaSujo });
+    estadoNuvem(aindaSujo ? 'pendente' : 'ok');
+  } catch (e) {
+    const code = e && e.code;
+    estadoNuvem(code === 'quota_exceeded' || code === 'invalid_argument' ? 'grande' : 'erro');
+    if (code === 'unavailable' || code === 'resource_exhausted') nuvemTimer = setTimeout(enviarNuvem, 4000 + Math.random() * 3000);
+  } finally { nuvemEnviando = false; }
 }
 
 /* ============ Arquivo no PC ============ */
@@ -351,6 +420,11 @@ async function lerArquivo(h) {
 }
 function statusArquivo() {
   const b = $('#arqStatus');
+  if (nuvem) {
+    const t = { ok: ['ok', '☁️ Sincronizado nos dois celulares'], pendente: ['ok', '☁️ Sincronizando…'], enviando: ['ok', '☁️ Sincronizando…'], conectando: ['ok', '☁️ Conectando…'],
+      'sem-rede': ['warn', '📱 Sem conexão: salvo neste celular'], erro: ['warn', '⚠️ Não sincronizou: salvo neste celular'], grande: ['warn', '⚠️ Dados grandes demais para sincronizar'] }[nuvemEstado];
+    if (t) { b.className = 'btn small ' + t[0]; b.textContent = t[1]; return; }
+  }
   if (!temFS) { b.className = 'btn small ok'; b.textContent = celular ? '📱 Salvo neste celular' : '✓ Salvo neste aparelho'; return; }
   if (arq && arqPronto) { b.className = 'btn small ok'; b.textContent = '✓ Salvo em ' + arq.name; }
   else if (arq) { b.className = 'btn small warn'; b.textContent = '↻ Reconectar ' + arq.name; }
@@ -522,7 +596,7 @@ const totalFatura = (cartaoId, ym) => r2(soma(itensFatura(cartaoId, ym)));
 // Gasto do dia a dia já lançado que é pago no mês: compras à vista nas faturas que vencem no mês + Pix/débito do mês
 // (o que sai de uma caixinha, como o Natal, não conta como dia a dia)
 function diaADiaReal(ym) {
-  let t = soma(db.gastos.filter(g => ymDe(g.data) === ym && !g.caixinha));
+  let t = soma(db.gastos.filter(g => ymDe(g.data) === ym && !g.caixinha && g.categoria !== 'Juros e tarifas'));
   for (const c of db.cartoes) t += soma(itensFatura(c.id, ym).filter(i => i.tipo === 'compra' && !(Number(i.ref.parcelas) > 1) && i.categoria !== 'Juros e tarifas' && !i.ref.caixinha));
   return r2(t);
 }
@@ -530,6 +604,31 @@ function diaADiaReal(ym) {
 const caixinhaPor = id => (db.caixinhas || []).find(x => x.id === id);
 const itensCaixinha = id => [...db.gastos.filter(g => g.caixinha === id), ...db.compras.filter(c => c.caixinha === id)].sort((a, b) => a.data.localeCompare(b.data));
 const gastoCaixinha = id => r2(soma(itensCaixinha(id)));
+/* ---------- Metas de economia: quanto já foi guardado para cada objetivo ---------- */
+const guardadoMeta = m => r2(soma(m.depositos || []));
+/* ---------- Empréstimo com parcela fixa: saldo devedor e amortização (reduz o prazo, mantém a parcela) ---------- */
+// taxa mensal que faz o valor financiado virar N parcelas de P (tabela Price)
+function taxaEmprestimo(pv, n, p) {
+  let lo = 0.0001, hi = 0.2;
+  for (let k = 0; k < 80; k++) { const m = (lo + hi) / 2, pm = pv * m / (1 - Math.pow(1 + m, -n)); if (pm > p) hi = m; else lo = m; }
+  return (lo + hi) / 2;
+}
+// mês a mês: parcela no mês + amortizações registradas; até onde der (ou até o mês "ate")
+function simularEmprestimo(f, ate, extraMensal = 0, extraDesde = null) {
+  const e = f.emprestimo, n0 = Number(e.parcelasOriginais || f.parcelasTotal), p = Number(f.valor);
+  const i = e.taxa || taxaEmprestimo(Number(e.valorFinanciado), n0, p);
+  let s = Number(e.valorFinanciado), m = f.inicio, pagas = 0, juros = 0, fim = null, k = 0;
+  while (s > 0.005 && k++ < 600) {
+    const j = s * i; juros += j; s = s + j - Math.min(p, s + j); pagas++;
+    for (const a of e.amortizacoes || []) if (ymDe(a.data) === m) s -= Number(a.valor);
+    if (extraDesde && m >= extraDesde && s > 0) s -= Math.min(extraMensal, s);
+    if (s <= 0.005) { fim = m; s = 0; break; }
+    if (ate && m >= ate) break;
+    m = addM(m, 1);
+  }
+  return { saldo: r2(Math.max(0, s)), pagas, fim, juros: r2(juros), taxa: i };
+}
+const emprestimosAtivos = ym => fixosAtivos(ym).filter(f => f.emprestimo);
 function mediaDiaADia() {
   const atual = hojeYM(), vals = [1, 2, 3].map(k => diaADiaReal(addM(atual, -k))).filter(v => v > 0);
   const agora = diaADiaReal(atual);
@@ -548,6 +647,12 @@ function saidasDoMes(ym) {
     const resto = r2(Number(k.valor) - gastoCaixinha(k.id));
     if (resto > 0) out.push({ descricao: `Caixinha ${k.nome} (separado, ainda não gasto)`, valor: resto, pessoa: 'Casal', categoria: 'Caixinha', origem: 'caixinha' });
   }
+  // dinheiro guardado numa meta sai da conta do mês (e volta, se for retirado)
+  for (const m of db.metas || []) for (const d of m.depositos || []) if (ymDe(d.data) === ym)
+    out.push({ descricao: `${d.valor < 0 ? 'Retirado de' : 'Guardado em'}: ${m.nome}`, valor: Number(d.valor), pessoa: 'Casal', categoria: 'Guardado', origem: 'meta' });
+  // amortização de empréstimo (a parcela normal já está nos fixos)
+  for (const f of db.fixos) for (const a of f.emprestimo?.amortizacoes || []) if (ymDe(a.data) === ym)
+    out.push({ descricao: `Amortização: ${f.nome}`, valor: Number(a.valor), pessoa: f.pessoa, categoria: 'Amortização', origem: 'amortizacao' });
   for (const f of fixosAtivos(ym).filter(f => !ehCartao(f.forma))) out.push({ descricao: f.nome, valor: f.valor, pessoa: f.pessoa, categoria: f.categoria, origem: 'fixo' });
   for (const g of db.gastos.filter(g => ymDe(g.data) === ym)) out.push({ descricao: g.descricao, valor: g.valor, pessoa: g.pessoa, categoria: g.categoria, origem: 'gasto' });
   for (const c of db.cartoes) for (const it of itensFatura(c.id, ym)) out.push({ ...it, origem: 'cartao' });
@@ -629,6 +734,23 @@ function fimDasParcelas(ym) { let m = ym, ult = null; for (let k = 0; k < 60; k+
 const comprometido = ym => r2(soma(saidasDoMes(ym)));
 // o que deve ter na conta no fim de um mês futuro: a sobra deste mês em diante vai passando para o seguinte
 const saldoDoMes = ym => r2(soma(entradasDoMes(ym)) - soma(saidasDoMes(ym)));
+// gráfico de barras: gasto do dia a dia de cada mês x a meta (linha tracejada)
+function graficoDiaADia(ym) {
+  const meses = [5, 4, 3, 2, 1, 0].map(k => addM(ym, -k)), vals = meses.map(diaADiaReal), meta = baseDiaADia();
+  const max = Math.max(meta, ...vals, 1) * 1.15, W = 320, H = 150, top = 14, base = 120, bw = 34, gap = (W - 6 * bw) / 6;
+  const y = v => base - (v / max) * (base - top);
+  const curto = v => v >= 1000 ? (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mil' : Math.round(v).toString();
+  const barras = meses.map((m, k) => {
+    const v = vals[k], x = gap / 2 + k * (bw + gap), acima = meta > 0 && v > meta, aberto = m >= hojeYM();
+    return `<rect x="${x}" y="${y(v)}" width="${bw}" height="${Math.max(0, base - y(v))}" rx="4" fill="var(${acima ? '--danger' : '--accent'})" opacity="${aberto ? 0.55 : 1}"/>
+      <text x="${x + bw / 2}" y="${y(v) - 4}" text-anchor="middle" font-size="9.5" fill="var(--text)">${v ? curto(v) : '–'}</text>
+      <text x="${x + bw / 2}" y="${base + 14}" text-anchor="middle" font-size="10" fill="var(--muted)">${nomeMes(m, true)}</text>`;
+  }).join('');
+  const linha = meta > 0 ? `<line x1="0" x2="${W}" y1="${y(meta)}" y2="${y(meta)}" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="5 4"/><text x="${W - 2}" y="${y(meta) - 4}" text-anchor="end" font-size="9.5" fill="var(--warn)">meta ${curto(meta)}</text>` : '';
+  const dentro = vals.filter((v, k) => v > 0 && meses[k] < hojeYM() && v <= meta).length, fechados = vals.filter((v, k) => v > 0 && meses[k] < hojeYM()).length;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Gasto do dia a dia por mês comparado com a meta">${linha}${barras}</svg>
+    <p class="small muted" style="margin:6px 0 0">Mercado, padaria, posto, lanches e Pix do dia a dia (sem parcelas, contas fixas e caixinhas). Vermelho = passou da meta; mais claro = mês ainda aberto.${fechados ? ` Dentro da meta em ${dentro} de ${fechados} mês(es) fechados.` : ''}</p>`;
+}
 function acumuladoAte(ym) { let a = 0; for (let m = hojeYM(), k = 0; m <= ym && k < 120; m = addM(m, 1), k++) a += saldoDoMes(m); return r2(a); }
 
 /* ============ Render ============ */
@@ -748,6 +870,29 @@ function rResumo() {
         ${its.length ? `<details style="margin-top:8px"><summary class="small muted" style="cursor:pointer">Ver ${its.length} gasto${its.length > 1 ? 's' : ''} da caixinha</summary><table style="width:100%;font-size:13px;margin-top:6px;font-variant-numeric:tabular-nums">${its.map(i => `<tr><td>${dataBR(i.data)} · ${esc(i.descricao)} <span class="small muted">${esc(i.cartaoId ? nomeForma(i.cartaoId) : nomeForma(i.forma))}</span></td><td style="text-align:right">${brl(i.valor)}</td></tr>`).join('')}</table></details>`
           : '<p class="small muted" style="margin:8px 0 0">Para gastar daqui: ao lançar um gasto (botão +), escolha a caixinha em "Sai da caixinha".</p>'}
       </div>`; }).join('') : `<div class="card"><p class="small muted" style="margin:0">Separe um valor para um fim específico, como o Natal. O que sai dela não conta no dia a dia; quando acabar, acabou.</p></div>`}`; })()}
+    ${emprestimosAtivos(mes).map(f => {
+      const e = f.emprestimo, agora = simularEmprestimo(f, mes), assim = simularEmprestimo(f, null);
+      const extra = Number(e.sugestao) || 400, com = simularEmprestimo(f, null, extra, mes), lembrar = mes >= (e.amortizarDesde || f.inicio);
+      const jaAmort = r2(soma(e.amortizacoes || []));
+      return `<h2>${esc(f.nome)}</h2><div class="card">
+        <div class="linha" style="padding-bottom:6px"><span>Parcela <b>${f.parcelaTxt}</b> · ${brl(f.valor)} todo dia ${f.dia}</span><b>falta ≈ ${brl(agora.saldo)}</b></div>
+        <p class="small muted" style="margin:0">Do jeito que está, termina em <b>${assim.fim ? nomeMes(assim.fim) : '—'}</b>.${jaAmort ? ` Já amortizado: <b>${brl(jaAmort)}</b>.` : ''}</p>
+        ${lembrar && com.fim && com.fim !== assim.fim ? `<div class="alert ok" style="margin-top:10px">💡 <b>Sobrou dinheiro? Amortize.</b> Com mais ${brl(extra)} por mês a partir de ${nomeMes(mes).split(' ')[0]}, termina em <b>${nomeMes(com.fim)}</b> e vocês pagam cerca de <b>${brl(assim.juros - com.juros)}</b> a menos de juros. No banco, escolha <b>reduzir o prazo</b>.</div>` : ''}
+        <div style="margin-top:10px;display:flex;justify-content:flex-end"><button class="btn" data-amortizar="${f.id}">Registrar amortização</button></div>
+      </div>`; }).join('')}
+    ${(() => {
+      const ms = db.metas || [];
+      return `<div class="row-head"><h2>Metas de economia</h2><button class="btn" data-acao="novaMeta">+ Meta</button></div>
+      ${ms.length ? ms.map(m => {
+        const g = guardadoMeta(m), alvo = Number(m.alvo) || 0, pct = alvo > 0 ? Math.max(0, Math.min(100, g / alvo * 100)) : 0, falta = r2(alvo - g);
+        return `<div class="card" style="margin-bottom:10px">
+          <div class="linha" style="padding-bottom:8px"><span><b>${esc(m.nome)}</b> <span class="small muted">meta ${brl(alvo)}</span></span><span class="acts"><button class="icon" data-editar="metas:${m.id}" aria-label="Editar meta">✎</button><button class="icon" data-excluir="metas:${m.id}" aria-label="Excluir meta">✕</button></span></div>
+          <div class="bar"><i style="width:${pct}%"></i></div>
+          <div class="linha small" style="margin-top:8px"><span>Guardado <b>${brl(g)}</b> (${Math.round(pct)}%)</span><span>${falta > 0 ? `falta ${brl(falta)}` : '🎉 meta atingida'}</span></div>
+          <div style="margin-top:10px;display:flex;justify-content:flex-end"><button class="btn primary" data-guardar="${m.id}">Guardar dinheiro</button></div>
+        </div>`; }).join('') : `<div class="card"><p class="small muted" style="margin:0">Crie uma meta (ex.: reserva de R$ 3.000) e registre cada vez que guardar dinheiro. O valor guardado sai da conta do mês.</p></div>`}`; })()}
+    <h2>Dia a dia nos últimos 6 meses</h2>
+    <div class="card">${graficoDiaADia(mes)}</div>
     <h2>Cada um</h2>
     <div class="grid two">${PESSOAS.map(cardPessoa).join('')}</div>
 
@@ -874,7 +1019,8 @@ function rCartoes() {
       ${(() => { const per = periodoFatura(c, mes); return `<div class="fat">
         <div class="fat-per">${ic('cal')}<p>Fatura de <b>${nomeMes(mes).split(' ')[0]}</b>: compras de <b>${per.de}</b> a <b>${per.ate}</b><br><span class="muted">vence <b style="color:var(--text)">${per.vence}</b>${per.ajustado ? ' · período ajustado' : ''}</span></p><button class="btn small" style="padding:5px 10px" data-virada="${c.id}">Mudar período</button></div>
         <div class="fat-tot"><span class="lbl">Total da fatura${per.aberta ? ' até agora' : ''}</span><span class="cc-total">${brl(total)}</span></div>
-        ${per.aberta ? `<p class="small" style="margin:6px 0 0;color:var(--warn)">Fatura aberta: compras feitas até ${per.ate} ainda entram nela.</p>` : ''}
+        ${per.aberta ? `<p class="small" style="margin:6px 0 0;color:var(--warn)">Fatura aberta: compras feitas até ${per.ate} ainda entram nela.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px"><span class="small muted">${(() => { const aj = db.compras.find(x => x.id === idAjuste(c.id, mes)); return aj ? `Inclui ${brl(aj.valor)} ainda não lançados (conferido com o banco).` : 'O total bate com o app do banco?'; })()}</span><button class="btn small" style="padding:5px 10px;white-space:nowrap" data-conferir="${c.id}">Conferir com o banco</button></div>` : ''}
         ${total > 0 ? `<label class="small muted" style="display:flex;align-items:center;gap:8px;margin-top:6px;justify-content:flex-end"><input type="checkbox" class="chk" style="width:20px;height:20px" data-pagar="c:${c.id}" ${pago ? 'checked' : ''}> fatura paga</label>` : ''}
       </div>`; })()}
       ${c.limite > 0 ? `<div style="margin-top:12px"><div class="linha small"><span>Limite usado</span><span>${brl(usado)} de ${brl(c.limite)}</span></div><div class="bar ${pct > 85 ? 'bad' : pct > 60 ? 'warn' : ''}"><i style="width:${pct}%"></i></div></div>` : ''}
@@ -888,7 +1034,7 @@ function rCartoes() {
   }).join('');
   $('#cartoes').innerHTML = `
     <div class="row-head" style="margin-top:4px"><h2>Cartões de crédito</h2>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${db.cartoes.length ? `<button class="btn" data-acao="duplicados">Procurar duplicados${dups.size ? ` (${gruposDuplicados().length})` : ''}</button><button class="btn" data-acao="novoGasto">+ Compra</button>` : ''}<button class="btn primary" data-acao="novoCartao">+ Cartão</button></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${db.cartoes.length ? `<button class="btn" data-acao="importarPdf">📄 Importar fatura (PDF)</button><button class="btn" data-acao="duplicados">Procurar duplicados${dups.size ? ` (${gruposDuplicados().length})` : ''}</button><button class="btn" data-acao="novoGasto">+ Compra</button>` : ''}<button class="btn primary" data-acao="novoCartao">+ Cartão</button></div></div>
     <p class="small muted" style="margin:-4px 0 12px">Compras feitas no dia do fechamento ou depois vão para a fatura seguinte. Use as setas lá em cima para ver as faturas dos próximos meses.</p>
     ${blocos || '<div class="list"><div class="empty">Cadastre os cartões de vocês com dia de fechamento e vencimento.</div></div>'}`;
 }
@@ -1081,6 +1227,14 @@ FORMS.caixinhas = {
     { n: 'mes', l: 'Mês', t: 'month', d: mes, hint: 'O valor inteiro já sai das contas deste mês.' },
   ],
   salvar: v => { db.caixinhas ||= []; upsert('caixinhas', v); },
+};
+FORMS.metas = {
+  titulo: 'Meta', fem: true,
+  campos: () => [
+    { n: 'nome', l: 'Objetivo', t: 'text', full: true, ph: 'ex.: Reserva de emergência, Entrada do imóvel' },
+    { n: 'alvo', l: 'Quanto quer juntar (R$)', t: 'valor' },
+  ],
+  salvar: v => { db.metas ||= []; if (!db.metas.some(m => m.id === v.id)) v.depositos = []; upsert('metas', v); },
 };
 
 function upsert(col, v) {
@@ -1298,6 +1452,8 @@ const ACOES = {
   novoFixo: () => abrirForm('fixos'),
   novoCartao: () => abrirForm('cartoes'),
   novaCaixinha: () => abrirForm('caixinhas'),
+  novaMeta: () => abrirForm('metas'),
+  importarPdf: () => $('#importPdf').click(),
   duplicados: () => abrirDuplicados(),
   buscar: () => abrirBusca(),
   salvarReserva: () => { const v = lerValor($('#cfgReserva').value); if (isNaN(v)) return toast('Valor inválido'); db.reserva = v; salvar(); toast('Reserva atualizada'); },
@@ -1347,21 +1503,169 @@ async function importarFaturas(d) {
   const ajustes = (d.cartoes || []).map(c => { const a = acharCartao(c.nome); return { c: a, n: a && { fechamento: c.fechamento ?? a.fechamento, vencimento: c.vencimento ?? a.vencimento } }; })
     .filter(x => x.c && (Number(x.c.fechamento) !== Number(x.n.fechamento) || Number(x.c.vencimento) !== Number(x.n.vencimento)));
   const novas = [], repetidas = [];
-  const existentes = new Set(db.compras.map(chaveCompra));
+  // já lançada: mesmo cartão, data e nº de parcelas, e valor igual (tolerando os centavos que a 1ª parcela absorve)
+  // Parcelada: aceita até 5 dias de diferença na data e 1% no total (lançada à mão com outra data, ou parcela com juros que varia centavos)
+  const dias = (a, b) => Math.abs(new Date(a + 'T12:00') - new Date(b + 'T12:00')) / 864e5;
+  const jaExiste = c => db.compras.some(x => !x.ajusteBanco && x.cartaoId === c.cartaoId && (Number(x.parcelas) || 1) === c.parcelas && (c.parcelas > 1
+    ? dias(x.data, c.data) <= 5 && Math.abs(Number(x.valor) - c.valor) <= Math.max(0.01 * c.parcelas + 0.005, c.valor * 0.01)
+    : x.data === c.data && Math.abs(Number(x.valor) - c.valor) <= 0.005));
+  const faturasTocadas = new Set();
   for (const x of d.compras) {
     const cart = acharCartao(x.cartao), n = Math.max(1, parseInt(x.parcelas) || 1);
     const valor = x.valorParcela ? r2(x.valorParcela * n) : r2(x.valor);
     const c = { id: uid(), cartaoId: cart.id, data: x.data, descricao: x.descricao, valor, parcelas: n, categoria: x.categoria || 'Outros', pessoa: x.pessoa || cart.titular };
-    if (x.fatura) c.primeiraParcela = addM(x.fatura, -((parseInt(x.parcelaNaFatura) || 1) - 1));
-    (existentes.has(chaveCompra(c)) ? repetidas : novas).push(c);
+    if (x.fatura) { c.primeiraParcela = addM(x.fatura, -((parseInt(x.parcelaNaFatura) || 1) - 1)); faturasTocadas.add(idAjuste(cart.id, x.fatura)); }
+    (jaExiste(c) ? repetidas : novas).push(c);
   }
-  const msg = `${novas.length} compra(s) nova(s) para adicionar.` + (repetidas.length ? `\n${repetidas.length} já estavam lançadas e serão puladas.` : '') +
+  const ajustesBanco = db.compras.filter(x => x.ajusteBanco && faturasTocadas.has(x.id));
+  const msg = (d.titulo ? d.titulo + '\n\n' : '') + `${novas.length} compra(s) nova(s) para adicionar.` + (repetidas.length ? `\n${repetidas.length} já estavam lançadas e serão puladas.` : '') +
+    (ajustesBanco.length ? `\nO ajuste "ainda não lançado" dessa fatura (${brl(soma(ajustesBanco))}) sai, porque agora entram as compras de verdade.` : '') +
+    (d.aviso ? '\n\n' + d.aviso : '') +
     (ajustes.length ? `\n\nTambém vou corrigir: ${ajustes.map(a => `${a.c.nome} → fecha dia ${a.n.fechamento}, vence dia ${a.n.vencimento}`).join('; ')}.` : '') + '\n\nAdicionar?';
   if (!await confirmar(msg.replace(/\n*Adicionar\?$/, ''), 'Adicionar', 'Adicionar faturas')) return;
   for (const a of ajustes) { a.c.fechamento = Number(a.n.fechamento); a.c.vencimento = Number(a.n.vencimento); }
+  db.compras = db.compras.filter(x => !ajustesBanco.includes(x));
   db.compras.push(...novas);
   salvar(); aba = 'cartoes'; render(); toast(`${novas.length} compra(s) adicionada(s)`);
 }
+
+/* ---------- Conferir a fatura aberta com o total que o app do banco mostra ---------- */
+const idAjuste = (cartaoId, ym) => `aj_${cartaoId}_${ym}`;
+async function conferirComBanco(cartaoId) {
+  const c = cartaoPor(cartaoId); if (!c) return;
+  const id = idAjuste(c.id, mes), aj = db.compras.find(x => x.id === id);
+  const semAjuste = r2(totalFatura(c.id, mes) - (aj ? Number(aj.valor) : 0));
+  const r = await perguntar(`Qual é o total da fatura de ${nomeMes(mes).split(' ')[0]} do ${c.nome} no app do banco agora?\nNo nosso app, sem ajuste, ela está em ${brl(semAjuste)}.`, '', 'Conferir com o banco');
+  if (r === null) return;
+  const v = lerValor(r); if (isNaN(v) || v < 0) return toast('Valor inválido');
+  const dif = r2(v - semAjuste);
+  db.compras = db.compras.filter(x => x.id !== id);
+  if (dif > 0.009) {
+    db.compras.push({ id, ajusteBanco: true, cartaoId: c.id, data: hojeISO(), descricao: 'Compras ainda não lançadas (conferido com o banco)', valor: dif, parcelas: 1, categoria: 'Outros', pessoa: 'Casal', primeiraParcela: mes });
+    salvar(); toast(`Ajuste de ${brl(dif)} lançado na fatura`);
+  } else { salvar(); toast(dif < -0.009 ? `O app tem ${brl(-dif)} a mais que o banco: confira se há algo lançado duas vezes` : 'Bate com o banco 👍'); }
+}
+
+/* ---------- Ler o PDF da fatura (Santander, Porto, Atacadão) no próprio aparelho ---------- */
+// O leitor de PDF (pdf.js) é baixado só na primeira vez que se usa; o arquivo da fatura não sai do aparelho.
+const PDFJS_BASE = window.PDFJS_BASE || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let pdfjsPronto = null;
+function carregarScript(src) { return new Promise((ok, erro) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('script')); document.head.appendChild(s); }); }
+function carregarPdfjs() {
+  // o "worker" roda na própria página (o claude.ai não deixa abrir worker de outro endereço)
+  pdfjsPronto ||= carregarScript(PDFJS_BASE + 'pdf.worker.min.js').then(() => carregarScript(PDFJS_BASE + 'pdf.min.js')).then(() => window.pdfjsLib);
+  return pdfjsPronto;
+}
+// Monta as linhas do PDF como no papel: pedaços na mesma altura viram uma linha; espaço grande vira "   " (separa colunas)
+async function linhasDoPdf(buf) {
+  const lib = await carregarPdfjs();
+  const pdf = await lib.getDocument({ data: buf, isEvalSupported: false }).promise, linhas = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const itens = (await (await pdf.getPage(p)).getTextContent()).items.filter(i => i.str && i.str.trim());
+    const grupos = [];
+    for (const i of itens) {
+      const y = i.transform[5], x = i.transform[4];
+      let g = grupos.find(g => Math.abs(g.y - y) < 2.5); if (!g) grupos.push(g = { y, it: [] });
+      g.it.push({ x, fim: x + (i.width || 0), s: i.str });
+    }
+    grupos.sort((a, b) => b.y - a.y);
+    for (const g of grupos) {
+      g.it.sort((a, b) => a.x - b.x);
+      let s = '', fim = null;
+      for (const i of g.it) { if (fim !== null) { const gap = i.x - fim; s += gap > 9 ? '   ' : gap > 1 ? ' ' : ''; } s += i.s; fim = i.fim; }
+      linhas.push(s.replace(/\s+$/, ''));
+    }
+  }
+  return linhas;
+}
+const numBR = s => Number(String(s).replace(/\./g, '').replace(',', '.'));
+function categoriaPorNome(d) {
+  const t = semAcento(d).toUpperCase();
+  if (/JUROS|IOF|MULTA|ANUIDADE|ENCARGO|TARIFA/.test(t)) return 'Juros e tarifas';
+  if (/POSTO|SHELL|PETRO|COMBUST|PITSTOP/.test(t)) return 'Transporte';
+  if (/FARM|DROGA|PAGUE MENOS/.test(t)) return 'Saúde';
+  if (/PET|RACAO|RACOES/.test(t)) return 'Pets';
+  if (/PADARIA|PANIF|LANCH|BURGER|PIZZ|RESTAUR|COXINHA|IFOOD|CAFE|ACAI|SORVET|PASTEL|CHURR/.test(t)) return 'Alimentação fora';
+  if (/SUPERMERC|MERCADO|CASAGRAN|CARONE|SENDAS|ASSAI|ATACAD|FEIRAO|HORTI|FRUT|ACOUGUE|CARNE|COMERCIAL LIMA/.test(t)) return 'Mercado';
+  return 'Outros';
+}
+// ano da compra a partir do vencimento da fatura: dia/mês depois do mês do vencimento = ano anterior
+function dataDaCompra(dm, venc) {
+  const [d, m] = dm.split('/').map(Number), vy = +venc.slice(0, 4), vm = +venc.slice(5, 7);
+  return `${m > vm ? vy - 1 : vy}-${pad(m)}-${pad(d)}`;
+}
+const PULAR = /PAGAMENTO|SALDO FATURA ANTERIOR|AJUSTE A CREDITO|ESTORNO|CASHBACK/i;
+function lerFaturaPdf(linhas) {
+  const txt = linhas.join('\n'), itens = []; let banco = null, venc = null, total = null, ignorados = 0;
+  const dataVenc = s => { const [d, m, y] = s.split('/'); return `${y}-${m}-${d}`; };
+  if (/LAN[ÇC]AMENTOS NO BRASIL/i.test(txt) && /CSF|ATACAD/i.test(txt)) { // Atacadão (Banco CSF)
+    banco = 'ATACAD';
+    const m = txt.match(/TOTAL DA SUA FATURA[\s\S]{0,200}?([\d.]+,\d\d)[\s\S]{0,200}?(\d{2}\/\d{2}\/\d{4})/i); if (m) { total = numBR(m[1]); venc = dataVenc(m[2]); }
+    let on = false;
+    for (const l of linhas) {
+      if (/LAN[ÇC]AMENTOS NO BRASIL/i.test(l)) { on = true; continue; }
+      if (on && /TOTAL DA FATURA/i.test(l)) on = false;
+      if (!on) continue;
+      const r = l.match(/^\s*(\d\d\/\d\d)\s+(.+?)\s{2,}([\d.]+,\d\d)(-?)\s*$/); if (!r) continue;
+      const [, dm, desc, val, neg] = r; if (neg || PULAR.test(desc)) continue;
+      const p = desc.match(/[-\s](\d{1,2})\/(\d{1,2})\s*$/), n = p ? +p[2] : 1, k = p ? +p[1] : 1;
+      itens.push({ dm, descricao: desc.replace(/\s*-?\s*\d{1,2}\/\d{1,2}\s*$/, '').trim(), valor: numBR(val), n, k });
+    }
+  } else if (/Lan[çc]amentos: compras e saques/i.test(txt)) { // Porto
+    banco = 'PORTO';
+    const m = txt.match(/Esta fatura vence em\s*(\d{2}\/\d{2}\/\d{4})/i); if (m) venc = dataVenc(m[1]);
+    const t = txt.match(/O valor total [ée]\s*R\$\s*([\d.]+,\d\d)/i); if (t) total = numBR(t[1]);
+    let on = false;
+    for (const l of linhas) {
+      if (/Lan[çc]amentos: compras e saques/i.test(l)) { on = true; continue; }
+      if (on && /Lan[çc]amentos no cart[ãa]o|Contesta[çc][õo]es/i.test(l)) on = false;
+      if (!on) continue;
+      const r = l.match(/^\s*(\d\d\/\d\d)\s+(.+?)\s{2,}(-?[\d.]+,\d\d)\s*$/); if (!r) continue;
+      const [, dm, desc, val] = r; if (val.startsWith('-') || PULAR.test(desc) || /^Desc/i.test(desc)) continue;
+      if (/\bPA\/\d+/.test(desc)) { ignorados++; continue; } // parcela sem o total (ex.: seguro): conferir à mão
+      const p = desc.match(/\s(\d{2})\/(\d{2})\s/), n = p ? +p[2] : 1, k = p ? +p[1] : 1;
+      itens.push({ dm, descricao: desc.replace(/\s\d{2}\/\d{2}\s/, ' ').replace(/\s+/g, ' ').trim(), valor: numBR(val), n, k });
+    }
+  } else if (/SANTANDER/i.test(txt) && /Detalhamento da Fatura/i.test(txt)) { // Santander (duas colunas)
+    banco = 'SANTANDER';
+    const m = txt.match(/Vencimento[\s\S]{0,300}?(\d{2}\/\d{2}\/\d{4})/i); if (m) venc = dataVenc(m[1]);
+    // total: o valor que aparece ao lado da data de vencimento (o PDF também traz simulações de parcelamento)
+    if (m) { const t = txt.match(new RegExp('R\\$\\s*([\\d.]+,\\d\\d)\\s+' + m[1].replace(/\//g, '\\/'))); if (t) total = numBR(t[1]); }
+    const ini = linhas.findIndex(l => /Detalhamento da Fatura/i.test(l));
+    let fim = -1; linhas.forEach((l, k) => { if (/Juros e Custo Efetivo/i.test(l)) fim = k; });
+    const re = /(?:^|\s)(\d\d\/\d\d)\s+([A-ZÀ-Ú0-9*@#&'.,\-\/ ]+?[A-ZÀ-Ú0-9*)])(?:\s+(\d\d\/\d\d))?\s{2,}(-?[\d.]+,\d\d)(?![\d%])/g;
+    for (const l of linhas.slice(ini, fim > ini ? fim : undefined)) {
+      for (const r of l.matchAll(re)) {
+        const [, dm, desc, parc, val] = r;
+        if (val.startsWith('-') || PULAR.test(desc) || /VALOR TOTAL/.test(desc)) continue;
+        const [k, n] = parc ? parc.split('/').map(Number) : [1, 1];
+        itens.push({ dm, descricao: desc.replace(/\s+/g, ' ').trim(), valor: numBR(val), n: n || 1, k: k || 1 });
+      }
+    }
+  }
+  if (!banco || !venc) return null;
+  return { banco, venc, total, itens, ignorados };
+}
+$('#importPdf').onchange = async e => {
+  const arquivos = [...e.target.files]; e.target.value = ''; if (!arquivos.length) return;
+  toast('Lendo a fatura…');
+  for (const f of arquivos) {
+    let fat = null;
+    try { fat = lerFaturaPdf(await linhasDoPdf(await f.arrayBuffer())); }
+    catch (err) { await avisar(`Não consegui abrir "${f.name}". ${err && err.message === 'script' ? 'O leitor de PDF não carregou: confira a internet e tente de novo.' : 'O arquivo pode estar protegido por senha ou não ser uma fatura.'}`); continue; }
+    if (!fat) { await avisar(`"${f.name}" não parece uma fatura do Santander, Porto ou Atacadão que eu saiba ler.`); continue; }
+    const cart = db.cartoes.find(c => semAcento(c.nome).toUpperCase().includes(fat.banco));
+    if (!cart) { await avisar(`Cadastre primeiro o cartão ${fat.banco} (aba Cartões) e tente de novo.`); continue; }
+    const fatura = fat.venc.slice(0, 7);
+    const compras = fat.itens.filter(i => i.valor > 0).map(i => ({ cartao: cart.nome, data: dataDaCompra(i.dm, fat.venc), descricao: i.descricao, valorParcela: i.valor, parcelas: i.n, parcelaNaFatura: i.k, fatura, categoria: categoriaPorNome(i.descricao) }));
+    const lidos = r2(soma(fat.itens));
+    await importarFaturas({ compras,
+      titulo: `Fatura ${cart.nome} que vence em ${dataBR(fat.venc)}${fat.total ? ` · total no PDF ${brl(fat.total)}` : ''}`,
+      aviso: (fat.ignorados ? `${fat.ignorados} parcela(s) sem o número total de parcelas (ex.: seguro) ficaram de fora: confira à mão. ` : '') + `Compras lidas somam ${brl(lidos)} (pagamentos e créditos não entram).` });
+    mes = fatura;
+  }
+  render();
+};
 $('#importFile').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   try {
@@ -1379,7 +1683,8 @@ function juntarDados(outro) {
   const novos = {};
   if (!db.pessoas && Array.isArray(outro.pessoas) && outro.pessoas.length === 2) db.pessoas = [...outro.pessoas];
   db.caixinhas ||= [];
-  for (const col of ['receitas', 'entradasFixas', 'fixos', 'cartoes', 'compras', 'gastos', 'caixinhas']) {
+  db.metas ||= [];
+  for (const col of ['receitas', 'entradasFixas', 'fixos', 'cartoes', 'compras', 'gastos', 'caixinhas', 'metas']) {
     const ids = new Set(db[col].map(x => x.id));
     const chaveRec = r => `${r.data}|${r.pessoa}|${Number(r.valor).toFixed(2)}`; // mesma entrada lançada nos dois aparelhos
     const chaves = col === 'compras' ? new Set(db.compras.map(chaveCompra)) : col === 'receitas' ? new Set(db.receitas.map(chaveRec)) : null;
@@ -1417,8 +1722,30 @@ document.addEventListener('drop', async e => {
 });
 
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-tab],[data-acao],[data-editar],[data-excluir],[data-encerrar],[data-ajustar],[data-virada],[data-visao]');
+  const t = e.target.closest('[data-tab],[data-acao],[data-editar],[data-excluir],[data-encerrar],[data-ajustar],[data-virada],[data-visao],[data-guardar],[data-amortizar],[data-conferir]');
   if (!t) return;
+  const dataDoMes = () => mes === hojeYM() ? hojeISO() : mes + '-10';
+  const lerComSinal = r => { const neg = /^\s*-/.test(r); const v = lerValor(String(r).replace('-', '')); return neg ? -v : v; };
+  if (t.dataset.guardar) {
+    const m = (db.metas || []).find(x => x.id === t.dataset.guardar); if (!m) return;
+    const r = await perguntar(`Quanto vocês guardaram para "${m.nome}"?\nPara tirar dinheiro da meta, use um valor negativo (ex.: -200).`, '', 'Guardar dinheiro');
+    if (r === null) return;
+    const v = lerComSinal(r); if (isNaN(v) || !v) return toast('Valor inválido');
+    (m.depositos ||= []).push({ id: uid(), data: dataDoMes(), valor: r2(v) });
+    salvar(); toast(v > 0 ? `Guardado ${brl(v)} em ${m.nome}` : `Retirado ${brl(-v)} de ${m.nome}`); return;
+  }
+  if (t.dataset.amortizar) {
+    const f = db.fixos.find(x => x.id === t.dataset.amortizar); if (!f?.emprestimo) return;
+    const r = await perguntar(`Quanto vocês amortizaram em "${f.nome}"?\n(No banco, escolha reduzir o prazo e manter a parcela.)`, '', 'Registrar amortização');
+    if (r === null) return;
+    const v = lerValor(r); if (isNaN(v) || v <= 0) return toast('Valor inválido');
+    f.emprestimo.parcelasOriginais ||= f.parcelasTotal;
+    (f.emprestimo.amortizacoes ||= []).push({ id: uid(), data: dataDoMes(), valor: r2(v) });
+    const s = simularEmprestimo(f, null);
+    if (s.fim) { f.fim = s.fim; f.parcelasTotal = difM(s.fim, f.inicio) + 1; }
+    salvar(); toast(s.fim ? `Agora termina em ${nomeMes(s.fim)}` : 'Amortização registrada'); return;
+  }
+  if (t.dataset.conferir) return conferirComBanco(t.dataset.conferir);
   if (t.dataset.tab) { aba = t.dataset.tab; render(); window.scrollTo({ top: 0 }); return; }
   if (t.dataset.acao) return ACOES[t.dataset.acao]();
   if (t.dataset.editar) {
@@ -1519,10 +1846,11 @@ function aplicarSemente() {
   try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) {}
 }
 document.querySelectorAll('.bnav [data-ic]').forEach(b => b.insertAdjacentHTML('afterbegin', ic(b.dataset.ic)));
-aplicarSemente();
+{ const antes = db.semente; aplicarSemente(); if (db.semente !== antes) syncMeta.set({ ...syncMeta.get(), sujo: true }); } // atualização nova: manda para o outro celular
 prepararPessoas();
 render();
 iniciarArquivo();
+iniciarNuvem();
 // App instalável (funciona sem internet) e pedido para o celular não apagar os dados
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 try { navigator.storage?.persist?.(); } catch (e) {}
