@@ -273,7 +273,7 @@ let RESP = [...PESSOAS, 'Casal'];
 const CATEGORIAS = ['Moradia', 'Contas da casa', 'Mercado', 'Alimentação fora', 'Transporte', 'Saúde', 'Impostos (DAS/MEI/INSS)', 'Juros e tarifas', 'Trabalho', 'Educação', 'Assinaturas', 'Lazer', 'Compras', 'Pets', 'Outros'];
 const TIPOS_ENTRADA = ['Salário', 'Serviço / Freela', 'Pró-labore', 'Cliente fixo', 'Venda', 'Reembolso', 'Outros'];
 const FORMAS = { pix: 'Pix', boleto: 'Boleto', debito: 'Débito', dinheiro: 'Dinheiro' };
-const VAZIO = () => ({ receitas: [], entradasFixas: [], puladas: {}, fixos: [], cartoes: [], compras: [], gastos: [], pagos: {}, ajustes: {}, reserva: 0, divisao: '50', pctA: 50, pessoas: null });
+const VAZIO = () => ({ receitas: [], entradasFixas: [], puladas: {}, fixos: [], cartoes: [], compras: [], gastos: [], caixinhas: [], pagos: {}, ajustes: {}, reserva: 0, divisao: '50', pctA: 50, pessoas: null });
 
 let db = carregar();
 let mes = hojeYM();
@@ -520,11 +520,16 @@ const totalFatura = (cartaoId, ym) => r2(soma(itensFatura(cartaoId, ym)));
 // Todas as saídas do mês, item a item
 /* ---------- Previsão do dia a dia (mercado, padaria, posto…) ---------- */
 // Gasto do dia a dia já lançado que é pago no mês: compras à vista nas faturas que vencem no mês + Pix/débito do mês
+// (o que sai de uma caixinha, como o Natal, não conta como dia a dia)
 function diaADiaReal(ym) {
-  let t = soma(db.gastos.filter(g => ymDe(g.data) === ym));
-  for (const c of db.cartoes) t += soma(itensFatura(c.id, ym).filter(i => i.tipo === 'compra' && !(Number(i.ref.parcelas) > 1) && i.categoria !== 'Juros e tarifas'));
+  let t = soma(db.gastos.filter(g => ymDe(g.data) === ym && !g.caixinha));
+  for (const c of db.cartoes) t += soma(itensFatura(c.id, ym).filter(i => i.tipo === 'compra' && !(Number(i.ref.parcelas) > 1) && i.categoria !== 'Juros e tarifas' && !i.ref.caixinha));
   return r2(t);
 }
+/* ---------- Caixinhas: valor separado para um fim (ex.: Natal). Gasta dele; acabou, acabou. ---------- */
+const caixinhaPor = id => (db.caixinhas || []).find(x => x.id === id);
+const itensCaixinha = id => [...db.gastos.filter(g => g.caixinha === id), ...db.compras.filter(c => c.caixinha === id)].sort((a, b) => a.data.localeCompare(b.data));
+const gastoCaixinha = id => r2(soma(itensCaixinha(id)));
 function mediaDiaADia() {
   const atual = hojeYM(), vals = [1, 2, 3].map(k => diaADiaReal(addM(atual, -k))).filter(v => v > 0);
   const agora = diaADiaReal(atual);
@@ -538,6 +543,11 @@ function saidasDoMes(ym) {
   const out = [];
   const prev = previsaoDiaADia(ym);
   if (prev > 0) out.push({ descricao: 'Previsão do dia a dia', valor: prev, pessoa: 'Casal', categoria: 'Previsão (ainda não gasto)', origem: 'previsao' });
+  // a caixinha já separa o valor inteiro no mês dela; o que foi gasto aparece como lançamento, o resto como "separado"
+  for (const k of (db.caixinhas || []).filter(k => k.mes === ym)) {
+    const resto = r2(Number(k.valor) - gastoCaixinha(k.id));
+    if (resto > 0) out.push({ descricao: `Caixinha ${k.nome} (separado, ainda não gasto)`, valor: resto, pessoa: 'Casal', categoria: 'Caixinha', origem: 'caixinha' });
+  }
   for (const f of fixosAtivos(ym).filter(f => !ehCartao(f.forma))) out.push({ descricao: f.nome, valor: f.valor, pessoa: f.pessoa, categoria: f.categoria, origem: 'fixo' });
   for (const g of db.gastos.filter(g => ymDe(g.data) === ym)) out.push({ descricao: g.descricao, valor: g.valor, pessoa: g.pessoa, categoria: g.categoria, origem: 'gasto' });
   for (const c of db.cartoes) for (const it of itensFatura(c.id, ym)) out.push({ ...it, origem: 'cartao' });
@@ -615,7 +625,8 @@ const tetoCartoes = () => Number(db.tetoCartoes) > 0 ? Number(db.tetoCartoes) : 
 const cartoesDoMes = ym => db.cartoes.map(c => ({ nome: c.nome, valor: totalFatura(c.id, ym), aberta: periodoFatura(c, ym).aberta, hojeVai: mesPrimeiraParcela({ data: hojeISO() }, c) }));
 // último mês em que ainda existe alguma parcela
 function fimDasParcelas(ym) { let m = ym, ult = null; for (let k = 0; k < 60; k++) { if (parcelasDoMes(m).length) ult = m; m = addM(m, 1); } return ult; }
-const comprometido = ym => r2(previsaoDiaADia(ym) + soma(fixosAtivos(ym)) + soma(db.cartoes, c => soma(itensFatura(c.id, ym).filter(i => i.tipo === 'compra'))));
+// tudo o que deve sair no mês (o mesmo que a lista de saídas: fixos, faturas, Pix lançados, caixinhas e a previsão do dia a dia)
+const comprometido = ym => r2(soma(saidasDoMes(ym)));
 
 /* ============ Render ============ */
 function render() {
@@ -683,8 +694,10 @@ function rResumo() {
       <div class="v">${brl(c.valor)}</div></div>`;
   }).join('') : `<div class="empty">Nenhuma conta neste mês.</div>`;
 
-  const proj = [1, 2, 3, 4, 5, 6].map(k => { const m = addM(mes, k), ent = soma(entradasDoMes(m)), sai = comprometido(m), sobra = r2(ent - sai);
-    return `<div><span>${nomeMes(m, true)}</span><b>${brl(sai)}</b>${ent ? `<small class="${sobra < 0 ? 'neg' : 'pos'}" style="display:block;font-size:11.5px">${sobra < 0 ? 'faltam' : 'sobram'} ${brl(Math.abs(sobra))}</small>` : ''}</div>`; }).join('');
+  // acumulado: o que sobra deste mês passa para o próximo (é o que deve ter na conta no fim de cada mês)
+  let acum = saldo;
+  const proj = [1, 2, 3, 4, 5, 6].map(k => { const m = addM(mes, k), ent = soma(entradasDoMes(m)), sai = comprometido(m), sobra = r2(ent - sai); acum = r2(acum + sobra);
+    return `<div><span>${nomeMes(m, true)}</span><b>${brl(sai)}</b>${ent ? `<small class="${sobra < 0 ? 'neg' : 'pos'}" style="display:block;font-size:11.5px">${sobra < 0 ? 'faltam' : 'sobram'} ${brl(Math.abs(sobra))}</small>` : ''}<small class="${acum < 0 ? 'neg' : 'pos'}" style="display:block;font-size:11.5px;font-weight:700">acumulado ${acum < 0 ? '−' : ''}${brl(Math.abs(acum))}</small></div>`; }).join('');
 
   $('#resumo').innerHTML = `
     <div class="grid kpis">
@@ -719,6 +732,18 @@ function rResumo() {
           ${aqui.length ? ` Compras feitas hoje no <b>${aqui.map(esc).join(', ')}</b> entram aqui.` : abertas.length ? '' : ' Todas essas faturas já fecharam.'}</div>
         <table style="width:100%;font-size:13px;margin-top:8px;font-variant-numeric:tabular-nums">${cs.map(c => `<tr><td>${esc(c.nome)} <span class="small muted">${c.aberta ? 'aberta' : 'fechada'}</span></td><td style="text-align:right">${brl(c.valor)}</td></tr>`).join('')}</table>
       </div>`; })() : ''}
+    ${(() => {
+      const ks = (db.caixinhas || []).filter(k => k.mes === mes);
+      return `<div class="row-head"><h2>Caixinhas</h2><button class="btn" data-acao="novaCaixinha">+ Caixinha</button></div>
+      ${ks.length ? ks.map(k => {
+        const g = gastoCaixinha(k.id), resto = r2(Number(k.valor) - g), pct = Math.min(100, k.valor > 0 ? g / k.valor * 100 : 100), its = itensCaixinha(k.id);
+        return `<div class="card" style="margin-bottom:10px">
+        <div class="linha" style="padding-bottom:8px"><span><b>${esc(k.nome)}</b> <span class="small muted">separado ${brl(k.valor)}</span></span><span class="acts"><button class="icon" data-editar="caixinhas:${k.id}" aria-label="Editar caixinha">✎</button><button class="icon" data-excluir="caixinhas:${k.id}" aria-label="Excluir caixinha">✕</button></span></div>
+        <div class="bar ${resto < 0 ? 'bad' : pct > 85 ? 'warn' : ''}"><i style="width:${pct}%"></i></div>
+        <div class="alert ${resto < 0 ? 'bad' : pct > 85 ? 'warn' : 'ok'}" style="margin-top:10px">${resto < 0 ? `<b>Acabou: passou ${brl(-resto)}</b> do que foi separado.` : resto === 0 ? '<b>Acabou.</b> Tudo o que foi separado já foi gasto.' : `Já saiu ${brl(g)} · <b>ainda tem ${brl(resto)}</b>. Acabou, acabou.`}</div>
+        ${its.length ? `<details style="margin-top:8px"><summary class="small muted" style="cursor:pointer">Ver ${its.length} gasto${its.length > 1 ? 's' : ''} da caixinha</summary><table style="width:100%;font-size:13px;margin-top:6px;font-variant-numeric:tabular-nums">${its.map(i => `<tr><td>${dataBR(i.data)} · ${esc(i.descricao)} <span class="small muted">${esc(i.cartaoId ? nomeForma(i.cartaoId) : nomeForma(i.forma))}</span></td><td style="text-align:right">${brl(i.valor)}</td></tr>`).join('')}</table></details>`
+          : '<p class="small muted" style="margin:8px 0 0">Para gastar daqui: ao lançar um gasto (botão +), escolha a caixinha em "Sai da caixinha".</p>'}
+      </div>`; }).join('') : `<div class="card"><p class="small muted" style="margin:0">Separe um valor para um fim específico, como o Natal. O que sai dela não conta no dia a dia; quando acabar, acabou.</p></div>`}`; })()}
     <h2>Cada um</h2>
     <div class="grid two">${PESSOAS.map(cardPessoa).join('')}</div>
 
@@ -729,7 +754,7 @@ function rResumo() {
     <div class="card">${catArr.length ? catArr.map(([c, v]) => `<div class="cat"><span>${esc(c)}</span><div class="bar"><i style="width:${v / maxCat * 100}%"></i></div><span>${brl(v)}</span></div>`).join('') : '<div class="empty">Sem gastos neste mês ainda.</div>'}</div>
 
     <h2>Próximos meses</h2>
-    <div class="card"><p class="small muted" style="margin:0 0 10px">Em cima: o que deve sair (gastos fixos + parcelas já lançadas + a previsão do dia a dia). Embaixo: quanto sobra ou falta das entradas de todo mês.</p><div class="proj">${proj}</div></div>
+    <div class="card"><p class="small muted" style="margin:0 0 10px">Em cima: o que deve sair (gastos fixos + parcelas já lançadas + caixinhas + a previsão do dia a dia). Embaixo: quanto sobra ou falta no mês e o <b>acumulado</b> (a sobra de um mês passa para o seguinte, começando pelo saldo de ${nomeMes(mes).split(' ')[0]}).</p><div class="proj">${proj}</div></div>
   `;
 }
 
@@ -978,6 +1003,8 @@ const FORMS = {
       { n: 'descricao', l: 'Descrição', t: 'text', full: true, ph: 'ex.: Mercado, Uber, Farmácia' },
       { n: 'categoria', l: 'Categoria', t: 'select', o: lista(CATEGORIAS), d: 'Outros' },
       { n: 'pessoa', l: 'De quem', t: 'select', o: lista(RESP), d: 'Casal' },
+      { n: 'caixinha', l: 'Sai da caixinha', t: 'select', req: false, full: true, se: () => (db.caixinhas || []).length > 0,
+        o: [{ v: '', l: 'Não, é do dia a dia' }, ...(db.caixinhas || []).map(k => ({ v: k.id, l: `${k.nome} (${mesCurto(k.mes)}) · ainda tem ${brl(r2(k.valor - gastoCaixinha(k.id)))}` }))] },
       { n: 'forma', l: 'Como pagou', t: 'select', o: opcoesFormas(), d: 'pix' },
       { n: 'parcelas', l: 'Parcelas (total)', t: 'number', d: 1, min: 1, max: 48, se: v => ehCartao(v.forma) },
       { n: 'faturaMes', l: 'Vai na fatura de', t: 'month', req: false, se: v => ehCartao(v.forma) && Number(v.parcelas) <= 1, full: true,
@@ -988,6 +1015,7 @@ const FORMS = {
     ],
     salvar: v => {
       v.parcelas = Math.max(1, parseInt(v.parcelas) || 1);
+      if (!v.caixinha) delete v.caixinha;
       if (!v.id) v.id = uid();
       const antiga = db.compras.find(x => x.id === v.id);
       db.gastos = db.gastos.filter(x => x.id !== v.id);
@@ -1041,6 +1069,15 @@ const FORMS = {
   },
 };
 FORMS.compras = { ...FORMS.gastos, titulo: 'Compra no cartão', fem: true };
+FORMS.caixinhas = {
+  titulo: 'Caixinha', fem: true,
+  campos: () => [
+    { n: 'nome', l: 'Para quê', t: 'text', full: true, ph: 'ex.: Natal, Aniversário, Viagem' },
+    { n: 'valor', l: 'Valor separado (R$)', t: 'valor' },
+    { n: 'mes', l: 'Mês', t: 'month', d: mes, hint: 'O valor inteiro já sai das contas deste mês.' },
+  ],
+  salvar: v => { db.caixinhas ||= []; upsert('caixinhas', v); },
+};
 
 function upsert(col, v) {
   if (!v.id) v.id = uid();
@@ -1256,6 +1293,7 @@ const ACOES = {
   novoGasto: () => abrirForm('gastos'),
   novoFixo: () => abrirForm('fixos'),
   novoCartao: () => abrirForm('cartoes'),
+  novaCaixinha: () => abrirForm('caixinhas'),
   duplicados: () => abrirDuplicados(),
   buscar: () => abrirBusca(),
   salvarReserva: () => { const v = lerValor($('#cfgReserva').value); if (isNaN(v)) return toast('Valor inválido'); db.reserva = v; salvar(); toast('Reserva atualizada'); },
@@ -1336,7 +1374,8 @@ $('#importFile').onchange = async e => {
 function juntarDados(outro) {
   const novos = {};
   if (!db.pessoas && Array.isArray(outro.pessoas) && outro.pessoas.length === 2) db.pessoas = [...outro.pessoas];
-  for (const col of ['receitas', 'entradasFixas', 'fixos', 'cartoes', 'compras', 'gastos']) {
+  db.caixinhas ||= [];
+  for (const col of ['receitas', 'entradasFixas', 'fixos', 'cartoes', 'compras', 'gastos', 'caixinhas']) {
     const ids = new Set(db[col].map(x => x.id));
     const chaveRec = r => `${r.data}|${r.pessoa}|${Number(r.valor).toFixed(2)}`; // mesma entrada lançada nos dois aparelhos
     const chaves = col === 'compras' ? new Set(db.compras.map(chaveCompra)) : col === 'receitas' ? new Set(db.receitas.map(chaveRec)) : null;
@@ -1422,6 +1461,9 @@ document.addEventListener('click', async e => {
       db.fixos.forEach(f => { if (f.forma === id) f.forma = 'boleto'; });
     } else if (col === 'fixos') {
       if (!await confirmar('Excluir este gasto fixo de TODOS os meses? (Para só parar daqui pra frente, use ⏹ Encerrar.)', 'Excluir')) return;
+    } else if (col === 'caixinhas') {
+      if (!await confirmar('Excluir esta caixinha? Os gastos que saíram dela continuam lançados e voltam a contar no dia a dia.', 'Excluir')) return;
+      for (const x of [...db.gastos, ...db.compras]) if (x.caixinha === id) delete x.caixinha;
     } else if (!await confirmar('Excluir este lançamento?', 'Excluir')) return;
     db[col] = db[col].filter(x => x.id !== id);
     salvar();
