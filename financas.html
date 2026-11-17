@@ -627,6 +627,9 @@ const cartoesDoMes = ym => db.cartoes.map(c => ({ nome: c.nome, valor: totalFatu
 function fimDasParcelas(ym) { let m = ym, ult = null; for (let k = 0; k < 60; k++) { if (parcelasDoMes(m).length) ult = m; m = addM(m, 1); } return ult; }
 // tudo o que deve sair no mês (o mesmo que a lista de saídas: fixos, faturas, Pix lançados, caixinhas e a previsão do dia a dia)
 const comprometido = ym => r2(soma(saidasDoMes(ym)));
+// o que deve ter na conta no fim de um mês futuro: a sobra deste mês em diante vai passando para o seguinte
+const saldoDoMes = ym => r2(soma(entradasDoMes(ym)) - soma(saidasDoMes(ym)));
+function acumuladoAte(ym) { let a = 0; for (let m = hojeYM(), k = 0; m <= ym && k < 120; m = addM(m, 1), k++) a += saldoDoMes(m); return r2(a); }
 
 /* ============ Render ============ */
 function render() {
@@ -703,7 +706,8 @@ function rResumo() {
     <div class="grid kpis">
       <div class="card kpi"><div class="lbl"><span class="ico pos">${ic('entra')}</span>Entradas</div><div class="val">${brl(recebido + aReceber)}</div><div class="sub"><span class="pos">${brl(recebido)}</span> recebido${aReceber ? `<br><span class="warn-t">${brl(aReceber)}</span> a receber` : ''}</div></div>
       <div class="card kpi"><div class="lbl"><span class="ico neg">${ic('sai')}</span>Saídas</div><div class="val">${brl(totSaidas)}</div><div class="sub">${brl(aPagar)} ainda a pagar${previsaoDiaADia(mes) > 0 ? `<br><span class="warn-t">${brl(previsaoDiaADia(mes))}</span> previsão do dia a dia (ainda não gasto)` : ''}</div></div>
-      <div class="card kpi"><div class="lbl"><span class="ico ${saldo < 0 ? 'neg' : 'pos'}">${ic('carteira')}</span>Saldo previsto</div><div class="val ${saldo < 0 ? 'neg' : 'pos'}">${brl(saldo)}</div><div class="sub">entradas − saídas</div></div>
+      ${mes > hojeYM() ? (() => { const ac = acumuladoAte(mes); return `<div class="card kpi"><div class="lbl"><span class="ico ${ac < 0 ? 'neg' : 'pos'}">${ic('carteira')}</span>Saldo no fim do mês</div><div class="val ${ac < 0 ? 'neg' : 'pos'}">${brl(ac)}</div><div class="sub">com o que sobrou dos meses anteriores<br>só este mês: <span class="${saldo < 0 ? 'neg' : 'pos'}">${brl(saldo)}</span></div></div>`; })()
+        : `<div class="card kpi"><div class="lbl"><span class="ico ${saldo < 0 ? 'neg' : 'pos'}">${ic('carteira')}</span>Saldo previsto</div><div class="val ${saldo < 0 ? 'neg' : 'pos'}">${brl(saldo)}</div><div class="sub">entradas − saídas</div></div>`}
       <div class="card kpi"><div class="lbl"><span class="ico acc">${ic('cofre')}</span>Reserva</div><div class="val">${brl(db.reserva)}</div><div class="sub">${custoBase ? `cobre ${mesesReserva.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${mesesReserva >= 0.95 && mesesReserva < 1.05 ? 'mês' : 'meses'} de gastos` : 'defina em Ajustes'}</div></div>
     </div>
     <div class="card meta">
