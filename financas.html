@@ -884,6 +884,18 @@ function cartaoSemana(s, hoje) {
   h += `<div class="sem-b"><span class="sem-rot">Fazer</span>${tarefas.map(t => `<div class="sem-l ${t.feito ? 'ok' : ''}"><span class="sem-ic">${t.feito ? '✓' : '○'}</span><span class="sem-t">${t.html}</span>${t.botao}</div>`).join('')}</div>`;
   return h + '</article>';
 }
+// último abastecimento: compras/gastos de posto (cartão ou Pix) até hoje
+const ehCombustivel = x => /POSTO|SHELL|COMBUST|GASOL|PETRO|IPIRANGA|PITSTOP|AUTO POSTO/i.test(x.descricao || '');
+function ultimosAbastecimentos(n = 3) {
+  const hoje = hojeISO();
+  return [...db.compras, ...db.gastos].filter(x => ehCombustivel(x) && x.data <= hoje).sort((a, b) => b.data.localeCompare(a.data)).slice(0, n);
+}
+function htmlAbastecimento() {
+  const u = ultimosAbastecimentos(3); if (!u.length) return '';
+  const dias = Math.round((dataDe(hojeISO()) - dataDe(u[0].data)) / 864e5);
+  return `<div class="sem-g" style="margin-bottom:12px">⛽ <b>Último abastecimento: ${curtoBR(u[0].data)}</b> (${dias === 0 ? 'hoje' : dias === 1 ? 'ontem' : `há ${dias} dias`}) · ${brl(u[0].valor)} · ${esc(u[0].cartaoId ? nomeForma(u[0].cartaoId) : nomeForma(u[0].forma))}
+    ${u.length > 1 ? `<span class="small muted" style="display:block;margin-top:2px">Antes: ${u.slice(1).map(x => `${curtoBR(x.data)} (${brl(x.valor)})`).join(' · ')}. Lance cada abastecimento no app para esta data ficar certa.</span>` : ''}</div>`;
+}
 function rSemana() {
   const hoje = hojeISO(), ent = soma(entradasDoMes(mes)), sai = soma(saidasDoMes(mes)), sobra = r2(ent - sai);
   const fimConta = mes >= hojeYM() ? acumuladoAte(mes) : null, lim = limiteSemana();
@@ -894,6 +906,7 @@ function rSemana() {
       <li><b>Dia a dia até ${brl(lim)} por semana</b> (mercado, padaria, gasolina, farmácia, lanches).</li>
       <li><b>Nenhuma compra parcelada nova.</b> No cartão, só à vista, e lançando no app na hora.</li>
       <li><b>Pagar sempre o total da fatura.</b> Nunca o mínimo, nunca cheque especial.</li>${amort}${metas}</ol></details>
+    ${mes === hojeYM() ? htmlAbastecimento() : ''}
     <div class="sem-mes"><h2>${nomeMes(mes)[0].toUpperCase() + nomeMes(mes).slice(1)}</h2>${mes === hojeYM() ? '<button class="btn small primary" data-semana="0">Ir para esta semana</button>' : ''}</div>
     <div class="sem-nums">
       <div><span>Entra</span><b>${brl(ent)}</b></div><div><span>Sai</span><b>${brl(sai)}</b></div>
