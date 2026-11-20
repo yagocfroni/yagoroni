@@ -233,6 +233,10 @@ label.sem-l{cursor:pointer}
 .sem-g{background:var(--surface-2);border-radius:10px;padding:8px 10px}
 .sem-aviso{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:7px 10px;font-weight:600;font-size:14px}
 .sem-aviso.neg{background:var(--danger-soft);color:var(--danger)}
+.mk-tot{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px}.mk-tot div{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 12px;flex:1 1 140px}.mk-tot span{display:block;font-size:12px;color:var(--muted)}
+.mk-tab{width:100%;border-collapse:collapse;font-size:14px}.mk-tab th,.mk-tab td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.mk-tab td.n,.mk-tab th.n{text-align:right;white-space:nowrap}
+.mk-barato{color:var(--pos);font-weight:700}.mk-nota{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin:0 0 8px;background:var(--surface)}.mk-nota summary{cursor:pointer;display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.mk-busca{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:inherit;font:inherit;margin:4px 0 10px}
 .sem-comp{display:grid;gap:5px;padding:2px 2px 0}
 .sem-cat{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(40px,1fr) auto;gap:8px;align-items:center;font-size:14px}
 .sem-cat small{color:var(--muted)}
@@ -261,6 +265,7 @@ label.sem-l{cursor:pointer}
       <button class="tab" data-tab="semana">Semana</button>
       <button class="tab" data-tab="entradas">Entradas</button>
       <button class="tab" data-tab="gastos">Gastos do mês</button>
+      <button class="tab" data-tab="mercado">Mercado</button>
       <button class="tab" data-tab="fixos">Gastos fixos</button>
       <button class="tab" data-tab="cartoes">Cartões</button>
       <button class="tab" data-tab="config">Ajustes</button>
@@ -273,6 +278,7 @@ label.sem-l{cursor:pointer}
   <section id="semana"></section>
   <section id="entradas"></section>
   <section id="gastos"></section>
+  <section id="mercado"></section>
   <section id="fixos"></section>
   <section id="cartoes"></section>
   <section id="config"></section>
@@ -318,7 +324,7 @@ let RESP = [...PESSOAS, 'Casal'];
 const CATEGORIAS = ['Moradia', 'Contas da casa', 'Mercado', 'Alimentação fora', 'Transporte', 'Saúde', 'Impostos (DAS/MEI/INSS)', 'Juros e tarifas', 'Trabalho', 'Educação', 'Assinaturas', 'Lazer', 'Compras', 'Pets', 'Outros'];
 const TIPOS_ENTRADA = ['Salário', 'Serviço / Freela', 'Pró-labore', 'Cliente fixo', 'Venda', 'Reembolso', 'Outros'];
 const FORMAS = { pix: 'Pix', boleto: 'Boleto', debito: 'Débito', dinheiro: 'Dinheiro' };
-const VAZIO = () => ({ receitas: [], entradasFixas: [], puladas: {}, fixos: [], cartoes: [], compras: [], gastos: [], caixinhas: [], metas: [], pagos: {}, ajustes: {}, reserva: 0, divisao: '50', pctA: 50, pessoas: null });
+const VAZIO = () => ({ receitas: [], entradasFixas: [], puladas: {}, fixos: [], cartoes: [], compras: [], gastos: [], caixinhas: [], metas: [], notas: [], pagos: {}, ajustes: {}, reserva: 0, divisao: '50', pctA: 50, pessoas: null });
 
 let db = carregar();
 let mes = hojeYM();
@@ -802,9 +808,9 @@ function render() {
   const nm = nomeMes(mes); $('#mesLabel').textContent = nm[0].toUpperCase() + nm.slice(1);
   document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === aba));
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === aba));
-  const grupo = ['entradas', 'fixos', 'config', 'mais'].includes(aba) ? 'mais' : aba === 'semana' ? 'resumo' : aba;
+  const grupo = ['entradas', 'fixos', 'config', 'mais', 'mercado'].includes(aba) ? 'mais' : aba === 'semana' ? 'resumo' : aba;
   document.querySelectorAll('.bnav [data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === grupo));
-  ({ resumo: rResumo, semana: rSemana, entradas: rEntradas, gastos: rGastos, fixos: rFixos, cartoes: rCartoes, config: rConfig, mais: rMais })[aba]();
+  ({ resumo: rResumo, semana: rSemana, mercado: rMercado, entradas: rEntradas, gastos: rGastos, fixos: rFixos, cartoes: rCartoes, config: rConfig, mais: rMais })[aba]();
 }
 /* ============ Semana: o que entra, o que pagar, quanto pode gastar e o que fazer (segunda a domingo) ============ */
 const isoDe = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -915,8 +921,54 @@ function rSemana() {
     <div class="sem-lista">${semanasDoMes(mes).map(ini => cartaoSemana(semanaDados(ini), hoje)).join('')}</div>
     <p class="small muted" style="margin-top:12px">Use as setas lá em cima para ver outros meses. "Na conta no fim" soma a sobra dos meses anteriores a partir deste mês.</p>`;
 }
+
+/* ============ Mercado: cupons fiscais item a item e onde está mais barato ============ */
+const nomeProduto = it => semAcento(it.produto || it.nome).toUpperCase().replace(/\s+/g, ' ').trim();
+const precoUnit = it => Number(it.unit) || (Number(it.total) / (Number(it.qtd) || 1));
+const unidade = it => (it.un || 'UN').toUpperCase();
+let buscaMercado = '';
+function rMercado() {
+  const notas = (db.notas || []).slice().sort((a, b) => b.data.localeCompare(a.data));
+  const doMes = notas.filter(n => ymDe(n.data) === mes);
+  const porLoja = {};
+  for (const n of doMes) porLoja[n.loja] = r2((porLoja[n.loja] || 0) + Number(n.total || soma((n.itens || []).map(i => ({ valor: i.total })))));
+  // itens do mês somados por produto
+  const itensMes = {};
+  for (const n of doMes) for (const it of n.itens || []) {
+    const k = nomeProduto(it); const o = itensMes[k] ||= { nome: it.produto || it.nome, qtd: 0, total: 0, un: unidade(it), lojas: new Set() };
+    o.qtd += Number(it.qtd) || 1; o.total = r2(o.total + Number(it.total)); o.lojas.add(n.loja);
+  }
+  // comparação de preço: último preço de cada produto em cada loja (todos os meses)
+  const precos = {};
+  for (const n of notas.slice().reverse()) for (const it of n.itens || []) {
+    const k = nomeProduto(it); (precos[k] ||= { nome: it.produto || it.nome, un: unidade(it), lojas: {} }).lojas[n.loja] = { preco: precoUnit(it), data: n.data };
+  }
+  const q = semAcento(buscaMercado).toUpperCase().trim();
+  const filtra = k => !q || k.includes(q);
+  const comparaveis = Object.entries(precos).filter(([k, p]) => Object.keys(p.lojas).length > 1 && filtra(k)).sort((a, b) => a[0].localeCompare(b[0]));
+  const listaMes = Object.entries(itensMes).filter(([k]) => filtra(k)).sort((a, b) => b[1].total - a[1].total);
+  const fmtQtd = (q, un) => un === 'KG' ? `${String(r2(q)).replace('.', ',')} kg` : `${r2(q)} ${un === 'UN' ? 'un' : un.toLowerCase()}`;
+  $('#mercado').innerHTML = `
+    <div class="row-head"><h2>Mercado · ${nomeMes(mes)}</h2></div>
+    <p class="small muted" style="margin:0 0 8px">Tire uma foto do cupom fiscal (ou do QR Code da nota) e mande para o Claude no chat. Ele lança cada item com preço e loja aqui, e o valor pago continua contando só uma vez nos gastos.</p>
+    <div class="mk-tot"><div><span>Gasto em cupons no mês</span><b>${brl(soma(Object.values(porLoja).map(v => ({ valor: v }))))}</b></div>
+      ${Object.entries(porLoja).sort((a, b) => b[1] - a[1]).map(([l, v]) => `<div><span>${esc(l)}</span><b>${brl(v)}</b></div>`).join('')}</div>
+    <input class="mk-busca" id="mkBusca" type="search" placeholder="Procurar produto (ex.: arroz, leite, café)" value="${esc(buscaMercado)}">
+    <h2>Onde está mais barato</h2>
+    ${comparaveis.length ? `<table class="mk-tab"><thead><tr><th>Produto</th><th>Loja</th><th class="n">Preço</th></tr></thead><tbody>${comparaveis.map(([k, p]) => {
+      const ls = Object.entries(p.lojas).sort((a, b) => a[1].preco - b[1].preco);
+      return ls.map(([l, v], i) => `<tr>${i === 0 ? `<td rowspan="${ls.length}"><b>${esc(p.nome)}</b><br><span class="small muted">por ${p.un === 'KG' ? 'kg' : p.un.toLowerCase()}${ls.length > 1 ? ` · diferença ${brl(r2(ls[ls.length - 1][1].preco - ls[0][1].preco))}` : ''}</span></td>` : ''}<td class="${i === 0 ? 'mk-barato' : ''}">${i === 0 ? '✓ ' : ''}${esc(l)}<br><span class="small muted">${curtoBR(v.data)}</span></td><td class="n ${i === 0 ? 'mk-barato' : ''}">${brl(v.preco)}</td></tr>`).join('');
+    }).join('')}</tbody></table>` : `<p class="small muted">Aparece quando o mesmo produto tiver sido comprado em lojas diferentes.${q ? ' Nenhum produto com esse nome em mais de uma loja.' : ''}</p>`}
+    <h2 style="margin-top:18px">O que foi comprado em ${nomeMes(mes).split(' ')[0]}</h2>
+    ${listaMes.length ? `<table class="mk-tab"><thead><tr><th>Produto</th><th class="n">Qtd</th><th class="n">Total</th></tr></thead><tbody>${listaMes.map(([k, o]) => `<tr><td>${esc(o.nome)}<br><span class="small muted">${[...o.lojas].map(esc).join(', ')}</span></td><td class="n">${fmtQtd(o.qtd, o.un)}</td><td class="n">${brl(o.total)}</td></tr>`).join('')}</tbody></table>` : '<p class="small muted">Nenhum cupom lançado neste mês ainda.</p>'}
+    <h2 style="margin-top:18px">Cupons do mês</h2>
+    ${doMes.length ? doMes.map(n => `<details class="mk-nota"><summary><span>${curtoBR(n.data)} · ${esc(n.loja)}</span><span>${brl(Number(n.total))}</span></summary>
+      <table class="mk-tab" style="margin-top:6px"><tbody>${(n.itens || []).map(it => `<tr><td>${esc(it.nome)}</td><td class="n">${fmtQtd(Number(it.qtd) || 1, unidade(it))} × ${brl(precoUnit(it))}</td><td class="n">${brl(Number(it.total))}</td></tr>`).join('')}</tbody></table>
+      <p class="small muted" style="margin:6px 0 0">${(n.itens || []).length} itens${n.forma ? ' · ' + esc(nomeForma(n.forma)) : ''}${n.chave ? ' · nota ' + esc(n.chave.slice(-9)) : ''}</p></details>`).join('') : '<p class="small muted">Nenhum cupom neste mês.</p>'}`;
+  const b = $('#mkBusca'); b.oninput = () => { buscaMercado = b.value; const pos = b.selectionStart; rMercado(); const nb = $('#mkBusca'); nb.focus(); nb.setSelectionRange(pos, pos); };
+}
 function rMais() {
-  const opc = [['semana', 'cal', 'Semana', 'O que pagar, o que entra e quanto ainda pode gastar nesta semana'], ['entradas', 'entradas', 'Entradas', 'Salários, clientes e o que vai para a casa'], ['fixos', 'fixos', 'Gastos fixos', 'Aluguel, contas, financiamentos'],
+  const opc = [['semana', 'cal', 'Semana', 'O que pagar, o que entra e quanto ainda pode gastar nesta semana'], ['mercado', 'recibo', 'Mercado (cupons fiscais)', 'Tudo o que foi comprado, item a item, e onde está mais barato'], ['entradas', 'entradas', 'Entradas', 'Salários, clientes e o que vai para a casa'], ['fixos', 'fixos', 'Gastos fixos', 'Aluguel, contas, financiamentos'],
     ['config', 'ajustes', 'Ajustes', 'Nomes, divisão do casal, backup e importações']];
   $('#mais').innerHTML = `<h2 style="margin-top:4px">Mais</h2><div class="list mais-list">${opc.map(([t, i, n, d]) => `
     <div class="item" data-tab="${t}">${ic(i)}<div class="main"><div class="t">${n}</div><div class="s">${d}</div></div><span class="muted">›</span></div>`).join('')}
@@ -1838,7 +1890,8 @@ function juntarDados(outro) {
   if (!db.pessoas && Array.isArray(outro.pessoas) && outro.pessoas.length === 2) db.pessoas = [...outro.pessoas];
   db.caixinhas ||= [];
   db.metas ||= [];
-  for (const col of ['receitas', 'entradasFixas', 'fixos', 'cartoes', 'compras', 'gastos', 'caixinhas', 'metas']) {
+  db.notas ||= [];
+  for (const col of ['receitas', 'entradasFixas', 'fixos', 'cartoes', 'compras', 'gastos', 'caixinhas', 'metas', 'notas']) {
     const ids = new Set(db[col].map(x => x.id));
     const chaveRec = r => `${r.data}|${r.pessoa}|${Number(r.valor).toFixed(2)}`; // mesma entrada lançada nos dois aparelhos
     const chaves = col === 'compras' ? new Set(db.compras.map(chaveCompra)) : col === 'receitas' ? new Set(db.receitas.map(chaveRec)) : null;
