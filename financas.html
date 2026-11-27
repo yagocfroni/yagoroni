@@ -703,7 +703,8 @@ function saidasDoMes(ym) {
   // amortização de empréstimo (a parcela normal já está nos fixos)
   for (const f of db.fixos) for (const a of f.emprestimo?.amortizacoes || []) if (ymDe(a.data) === ym)
     out.push({ descricao: `Amortização: ${f.nome}`, valor: Number(a.valor), pessoa: f.pessoa, categoria: 'Amortização', origem: 'amortizacao' });
-  for (const f of fixosAtivos(ym).filter(f => !ehCartao(f.forma))) out.push({ descricao: f.nome, valor: f.valor, pessoa: f.pessoa, categoria: f.categoria, origem: 'fixo' });
+  // contas que a pessoa paga com o dinheiro dela (porFora) não saem da conta da casa
+  for (const f of fixosAtivos(ym).filter(f => !ehCartao(f.forma) && !f.porFora)) out.push({ descricao: f.nome, valor: f.valor, pessoa: f.pessoa, categoria: f.categoria, origem: 'fixo' });
   for (const g of db.gastos.filter(g => ymDe(g.data) === ym)) out.push({ descricao: g.descricao, valor: g.valor, pessoa: g.pessoa, categoria: g.categoria, origem: 'gasto' });
   for (const c of db.cartoes) for (const it of itensFatura(c.id, ym)) out.push({ ...it, origem: 'cartao' });
   return out;
@@ -711,7 +712,7 @@ function saidasDoMes(ym) {
 // Contas para pagar no mês: fixos (fora do cartão) + faturas
 function contasDoMes(ym) {
   const pagos = db.pagos[ym] || {};
-  const contas = fixosAtivos(ym).filter(f => !ehCartao(f.forma)).map(f => ({ chave: 'f:' + f.id, nome: f.nome + (f.parcelaTxt ? ` (${f.parcelaTxt})` : ''), valor: f.valor, dia: Number(f.dia) || 1, pessoa: f.pessoa, info: nomeForma(f.forma) }));
+  const contas = fixosAtivos(ym).filter(f => !ehCartao(f.forma) && !f.porFora).map(f => ({ chave: 'f:' + f.id, nome: f.nome + (f.parcelaTxt ? ` (${f.parcelaTxt})` : ''), valor: f.valor, dia: Number(f.dia) || 1, pessoa: f.pessoa, info: nomeForma(f.forma) }));
   for (const c of db.cartoes) {
     const v = totalFatura(c.id, ym);
     if (v > 0) contas.push({ chave: 'c:' + c.id, nome: 'Fatura ' + c.nome, valor: v, dia: Number(c.vencimento), pessoa: c.titular, info: 'cartão' });
@@ -832,6 +833,7 @@ function semanaDados(ini) {
   for (const ym of meses) {
     const ult = new Date(+ym.slice(0, 4), +ym.slice(5), 0).getDate();
     for (const c of contasDoMes(ym)) { const d = `${ym}-${pad(Math.min(c.dia, ult))}`; if (d >= ini && d <= fim) pagar.push({ ...c, data: d, ym }); }
+    for (const f of fixosAtivos(ym).filter(f => f.porFora)) { const d = `${ym}-${pad(Math.min(Number(f.dia) || 1, ult))}`; if (d >= ini && d <= fim) pagar.push({ chave: 'f:' + f.id, nome: `${f.nome} · ${f.pessoa} paga (fora da conta da casa)`, valor: f.valor, dia: f.dia, pessoa: f.pessoa, pago: !!(db.pagos[ym] || {})['f:' + f.id], data: d, ym, fora: true }); }
     for (const r of entradasDoMes(ym)) if (r.data >= ini && r.data <= fim) entra.push(r);
     for (const c of db.cartoes) { const v = virada(c, ym), d = `${ym}-${pad(Math.min(v, ult))}`; if (d >= ini && d <= fim) { const prox = mesPrimeiraParcela({ data: d }, c); avisos.push(`${c.nome} vira em ${dataBR(d)}: compras a partir desse dia vencem em ${pad(Math.min(Number(c.vencimento), 28))}/${prox.slice(5)}.`); } }
     for (const f of fixosAtivos(ym).filter(f => f.emprestimo)) { const d = `${ym}-${pad(Math.min(f.dia, ult))}`;
@@ -1202,7 +1204,7 @@ function rFixos() {
   const ids = new Set(ativos.map(f => f.id)), outros = db.fixos.filter(f => !ids.has(f.id));
   const linha = (f, ativo) => `
     <div class="item">
-      <div class="main"><div class="t">${esc(f.nome)}</div><div class="s">dia ${f.dia} · ${esc(f.categoria)} · ${esc(nomeForma(f.forma))} ${tag(f.pessoa)} ${f.parcelaTxt ? `<span class="tag">parcela ${f.parcelaTxt}</span>` : ''} ${!ativo ? `<span class="tag">${f.inicio > mes ? 'começa em ' + nomeMes(f.inicio) : 'encerrado em ' + nomeMes(f.fim || fimParcelas(f))}</span>` : ''}</div></div>
+      <div class="main"><div class="t">${esc(f.nome)}</div><div class="s">dia ${f.dia} · ${esc(f.categoria)} · ${esc(nomeForma(f.forma))} ${tag(f.pessoa)} ${f.parcelaTxt ? `<span class="tag">parcela ${f.parcelaTxt}</span>` : ''} ${f.porFora ? `<span class="tag">${esc(f.pessoa)} paga, fora da conta da casa</span>` : ''} ${!ativo ? `<span class="tag">${f.inicio > mes ? 'começa em ' + nomeMes(f.inicio) : 'encerrado em ' + nomeMes(f.fim || fimParcelas(f))}</span>` : ''}</div></div>
       <div class="v">${brl(f.valor)}${f.ajustado ? `<div class="small muted" style="font-weight:400;text-align:right">padrão ${brl(f.valorPadrao)}</div>` : ''}</div>
       <div class="acts">
         <button class="icon" data-editar="fixos:${f.id}" aria-label="Editar">✎</button>
